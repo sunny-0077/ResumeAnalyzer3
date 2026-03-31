@@ -460,7 +460,8 @@ button,input,textarea,select{font-family:inherit}
   /* Hero */
   .hero-wrap { padding: 100px 20px 40px; text-align: center; }
   .hero-h1 { font-size: 38px; }
-  .hero-ctas { justify-content: center; }
+  .hero-ctas { flex-direction: column; align-items: stretch; }
+  .hero-ctas .btn { width: 100%; }
   .hero-p { font-size: 15px; }
   
   /* Auth */
