@@ -38,9 +38,9 @@ export default function Navbar() {
 
       <div className="nav-actions">
         {isLanding ? (
-          <>
+          <div className="nav-actions mobile-hide-actions">
             <button 
-              className="btn" 
+              className="btn mobile-hide" 
               style={{ padding: '8px 16px', fontWeight: 700, color: 'var(--t2)', fontSize: '14px' }}
               onClick={() => router.push('/auth')}
             >
@@ -51,9 +51,9 @@ export default function Navbar() {
               style={{ padding: '8px 24px', fontWeight: 900, borderRadius: '12px' }}
               onClick={() => router.push('/auth')}
             >
-              Sign Up Free
+              {isLanding ? 'Get Started' : 'Sign Up Free'}
             </button>
-          </>
+          </div>
         ) : (
           <>
             <button className="nav-cmd" onClick={openCmd}>

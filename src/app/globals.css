@@ -432,11 +432,64 @@ button,input,textarea,select{font-family:inherit}
 
 
 .mobile-bottom-nav{display:none;position:fixed;bottom:0;left:0;right:0;background:rgba(255,255,255,.92);backdrop-filter:blur(16px);border-top:1px solid var(--border);padding:8px 0 calc(8px + env(safe-area-inset-bottom,0px));z-index:150}
-@media(max-width:768px){
-  .hero-wrap{grid-template-columns:1fr;gap:32px;padding:80px 20px 40px}
-  .sidebar{transform:translateX(-100%)}
-  .main{margin-left:0;padding:16px;padding-bottom:80px}
-  .mobile-bottom-nav{display:block}
+/* ═══════════════════════════════════════════════
+   RESPONSIVE (MOBILE-FIRST ADAPTATION)
+   ═══════════════════════════════════════════════ */
+@media (max-width: 1024px) {
+  .hero-h1 { font-size: 48px; }
+  .stat-grid, .pricing-grid, .pr-grid, .sal-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (max-width: 768px) {
+  /* Layout */
+  .hero-wrap, .auth-wrap, .demo-grid, .dash-grid-2, .upg-grid, .ip-grid { 
+    grid-template-columns: 1fr !important; 
+    gap: 32px;
+  }
+  
+  .main { margin-left: 0; padding: 24px 16px 100px; }
+  .sidebar { transform: translateX(-100%); }
+  .sidebar.open { transform: translateX(0); }
+  
+  /* Navbar */
+  .nav-pill { padding: 0 16px; }
+  .mobile-hide { display: none !important; }
+  .nav-cmd { padding: 8px; width: 40px; justify-content: center; }
+  .nav-cmd span:not(.mat), .nav-cmd kbd { display: none; }
+  
+  /* Hero */
+  .hero-wrap { padding: 100px 20px 40px; text-align: center; }
+  .hero-h1 { font-size: 38px; }
+  .hero-ctas { justify-content: center; }
+  .hero-p { font-size: 15px; }
+  
+  /* Auth */
+  .auth-wrap { display: flex; flex-direction: column; }
+  .auth-left { padding: 48px 24px; min-height: 300px; }
+  .auth-left h1 { font-size: 32px; }
+  .auth-right { padding: 40px 20px; }
+  
+  /* Grids */
+  .stat-grid, .pricing-grid, .pr-grid, .sal-grid, .stat-row, .ab-grid, .qa-grid, .ip-star-grid, .ip-stat-grid { 
+    grid-template-columns: 1fr !important; 
+    gap: 16px;
+  }
+  
+  .proof-inner { justify-content: center; text-align: center; }
+  .proof-companies { margin-left: 0; width: 100%; justify-content: center; }
+  
+  /* Components */
+  .modal-box { border-radius: 24px 24px 0 0; position: fixed; bottom: 0; margin-bottom: 0; }
+  .toast-container { top: auto; bottom: 80px; left: 16px; right: 16px; width: auto; }
+  .toast { min-width: 0; width: 100%; }
+  
+  .mobile-bottom-nav { display: flex; justify-content: space-around; }
+}
+
+@media (max-width: 480px) {
+  .hero-h1 { font-size: 32px; }
+  .auth-left { display: none; } /* On very small screens, just show the login form */
+  .sc-ring-w, .ip-ring-w { width: 90px; height: 90px; }
 }
 
 /* AUTH & ONBOARDING */
