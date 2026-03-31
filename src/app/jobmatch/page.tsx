@@ -11,18 +11,22 @@ export default function JobMatch() {
   const router = useRouter();
   const [tab, setTab] = useState<'single' | 'ab' | 'history' | 'local'>('ab');
   const { tier } = useSubscription();
-  const [resume, setResume] = useState('Senior Product Manager with 8+ years of experience leading cross-functional teams at Google and Amazon. Expert in user-centric design, A/B testing, and scaling cloud-native SaaS products.');
+  const [resumeText, setResumeText] = useState('Senior Product Manager with 8+ years of experience leading cross-functional teams at Google and Amazon. Expert in user-centric design, A/B testing, and scaling cloud-native SaaS products.');
   
   const [abJobs, setAbJobs] = useState([
     { id: 1, title: 'Senior Product Manager', company: 'Stripe', jd: 'We are looking for a Senior PM to lead our Billing platform. Experience with payments and API design is a plus.' },
     { id: 2, title: 'Lead Product Manager', company: 'Atlassian', jd: 'Join our Jira Cloud team. Focus on user growth, retention, and enterprise-grade features.' },
-    { id: 3, title: 'Product Director', company: 'Razorpay', jd: 'Scale our neo-banking initiative. Deep understanding of fintech and platform infrastructure required.' },
+    { id: 3, title: 'Product Director', company: 'Razrorpay', jd: 'Scale our neo-banking initiative. Deep understanding of fintech and platform infrastructure required.' },
   ]);
 
   const [results, setResults] = useState<any[]>([]);
   const [isMatching, setIsMatching] = useState(false);
 
   const startMatch = () => {
+    if (!resumeText.trim()) {
+      showToast("error","Paste your resume content first");
+      return;
+    }
     if (tier === 'free') {
       window.dispatchEvent(new CustomEvent('show-toast', { detail: { type: 'info', msg: 'Free plan: 1 match/day used. Upgrade for unlimited A/B compares.' } }));
     }
@@ -89,8 +93,8 @@ export default function JobMatch() {
                 </div>
                 <textarea 
                   className="ab-area" 
-                  value={resume}
-                  onChange={(e) => setResume(e.target.value)}
+                  value={resumeText}
+                  onChange={(e) => setResumeText(e.target.value)}
                   placeholder="Paste your central resume content here..."
                   style={{ minHeight: '100px', fontSize: '15px' }}
                 />

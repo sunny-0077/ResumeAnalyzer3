@@ -52,7 +52,7 @@ export default function ReferralsPage() {
         <main className="main" style={{ padding: '32px 48px', background: 'var(--surface)' }}>
           <div className="pg-hdr">
             <h1 style={{ fontSize: '32px', fontWeight: 900, color: 'var(--t1)' }}>Refer & Earn</h1>
-            <p style={{ color: 'var(--t3)', fontWeight: 600 }}>Share ProfilePro AI with friends. Every signup earns you 3 extra free analyses.</p>
+            <p style={{ color: 'var(--t3)', fontWeight: 600 }}>Share Hirely AI with friends. Every signup earns you 3 extra free analyses.</p>
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: '24px' }}>

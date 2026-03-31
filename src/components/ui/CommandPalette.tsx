@@ -16,7 +16,7 @@ export default function CommandPalette() {
     { icon: 'payments', label: 'Salary Intelligence', tag: 'Page', cat: 'Pages', action: () => router.push('/salary') },
     { icon: 'mic', label: 'Interview Prep', tag: 'Tool', cat: 'Tools', action: () => showToast('info', 'Opening Interview Prep...') },
     { icon: 'trending_up', label: 'Career Path Predictor', tag: 'Tool', cat: 'Tools', action: () => showToast('info', 'Starting Predictor...') },
-    { icon: 'description', label: 'Resume Analyzer', tag: 'Page', cat: 'Pages', action: () => router.push('/analyzer') },
+    { icon: 'description', label: 'Analyze Resume', tag: 'Page', cat: 'Pages', action: () => router.push('/analyzer') },
     { icon: 'mail', label: 'Cover Letters', tag: 'Tool', cat: 'Tools', action: () => showToast('info', 'Opening Generator...') },
     { icon: 'upload_file', label: 'Upload New Resume', tag: 'Action', cat: 'Actions', action: () => router.push('/analyzer') },
     { icon: 'share', label: 'Share Score Card', tag: 'Action', cat: 'Actions', action: () => window.dispatchEvent(new CustomEvent('open-share')) },

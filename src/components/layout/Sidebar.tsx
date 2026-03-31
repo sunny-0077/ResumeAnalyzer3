@@ -30,7 +30,7 @@ export default function Sidebar() {
           <span className={pathname === '/jobmatch' ? 'matf' : 'mat'}>manage_search</span> <span>Job Match</span>
         </Link>
         <Link href="/analyzer" className={`sb-it ${pathname === '/analyzer' ? 'active' : ''}`}>
-          <span className={pathname === '/analyzer' ? 'matf' : 'mat'}>description</span> <span>Resume Analyzer</span>
+          <span className={pathname === '/analyzer' ? 'matf' : 'mat'}>description</span> <span>Analyze Resume</span>
         </Link>
         <Link href="/jobs" className={`sb-it ${pathname === '/jobs' ? 'active' : ''}`}>
           <span className={pathname === '/jobs' ? 'matf' : 'mat'}>view_kanban</span> <span>Job Pipeline</span>

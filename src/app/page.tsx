@@ -25,6 +25,8 @@ export default function LandingPage() {
   const [signupCount, setSignupCount] = useState(12847);
   const [tab, setTab] = useState<'plans' | 'redeem'>('plans');
   const [coupon, setCoupon] = useState('');
+  const [resumeText, setResumeText] = useState('');
+  const [jobText, setJobText] = useState('');
 
   // Counter animation logic
   useEffect(() => {
@@ -55,6 +57,10 @@ export default function LandingPage() {
   }, []);
 
   const runDemo = () => {
+    if (!resumeText.trim()) {
+      showToast("error","Upload resume first");
+      return;
+    }
     setDemoState('loading');
     setTimeout(() => {
       setDemoState('result');
@@ -150,11 +156,21 @@ export default function LandingPage() {
           <div className="demo-grid">
             <div className="demo-panel">
               <div className="demo-label"><span className="mat">person</span> Your Resume</div>
-              <textarea className="demo-ta" placeholder="Paste your resume text..."></textarea>
+              <textarea 
+                className="demo-ta" 
+                placeholder="Paste your resume text..."
+                value={resumeText}
+                onChange={(e) => setResumeText(e.target.value)}
+              ></textarea>
             </div>
             <div className="demo-panel">
               <div className="demo-label"><span className="mat">work</span> Job Description</div>
-              <textarea className="demo-ta" placeholder="Paste job description..."></textarea>
+              <textarea 
+                className="demo-ta" 
+                placeholder="Paste job description..."
+                value={jobText}
+                onChange={(e) => setJobText(e.target.value)}
+              ></textarea>
             </div>
           </div>
           <button className="demo-btn" onClick={runDemo}>

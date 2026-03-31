@@ -55,7 +55,7 @@ export default function ResumeAnalyzer() {
         <main className="main">
           <div className="dash-header">
             <div>
-              <h1>Resume Analyzer 🚀</h1>
+              <h1>Hirely AI Analysis 🚀</h1>
               <p style={{ color: 'var(--t2)', fontWeight: 600, marginTop: '4px' }}>
                 Simulate a real ATS scan and see how a recruiter views your profile.
               </p>

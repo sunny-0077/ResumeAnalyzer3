@@ -33,7 +33,7 @@ export default function Navbar() {
         onClick={() => router.push('/')}
         style={{ cursor: 'pointer' }}
       >
-        Hirely<span>AI</span>
+        Hirely <span>AI</span>
       </div>
 
       <div className="nav-actions">
