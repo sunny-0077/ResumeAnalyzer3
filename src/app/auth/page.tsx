@@ -110,7 +110,7 @@ export default function AuthPage() {
   return (
     <div id="page-auth" className="afi">
       <nav className="auth-nav">
-        <div className="auth-logo">Hirely <span>AI</span></div>
+        <div className="auth-logo">Hirely&nbsp;<span>AI</span></div>
         <div style={{ fontSize: '13px', color: 'var(--t3)', fontWeight: 600 }}>Made in India 🇮🇳</div>
       </nav>
       
