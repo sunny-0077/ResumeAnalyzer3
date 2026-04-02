@@ -1,9 +1,11 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useEscClose } from '@/hooks/useAppHooks';
 
 export default function InDepthAnalysisModal() {
   const [isOpen, setIsOpen] = useState(false);
+  useEscClose(setIsOpen);
 
   useEffect(() => {
     const handleOpen = () => setIsOpen(true);

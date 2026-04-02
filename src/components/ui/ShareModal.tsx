@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { useUser } from '@/context/AuthContext';
+import { useEscClose, useLoading } from '@/hooks/useAppHooks';
+import { safeReferral } from '@/lib/utils';
 
 export default function ShareModal() {
   const [isOpen, setIsOpen] = useState(false);
@@ -10,10 +12,13 @@ export default function ShareModal() {
   const userName =
     user?.user_metadata?.full_name ||
     user?.email?.split("@")[0] ||
-    `user-${user?.id?.slice(0,6)}` ||
+    `user-${user?.id?.slice(0, 6)}` ||
     "user";
 
-  const referralLink = `https://profilepro.ai/r/${userName}`;
+  const referralLink = `https://hirely.ai/r/${safeReferral(userName)}`;
+
+  useEscClose(setIsOpen);
+  const { loading: isCopying, setLoading: setIsCopying } = useLoading();
 
   useEffect(() => {
     const handleOpen = () => setIsOpen(true);
@@ -64,10 +69,12 @@ export default function ShareModal() {
           <div className="share-row">
             <input className="inp share-inp" value={referralLink} readOnly />
             <button className="btn btn-s" onClick={() => {
+              setIsCopying(true);
               navigator.clipboard.writeText(referralLink);
               window.dispatchEvent(new CustomEvent('show-toast', { detail: { type: 'success', msg: 'Copied link to clipboard!' } }));
-            }}>
-              <span className="mat">content_copy</span>
+              setTimeout(() => setIsCopying(false), 800);
+            }} disabled={isCopying}>
+              <span className="mat">{isCopying ? 'done' : 'content_copy'}</span>
             </button>
           </div>
           <button className="btn btn-li btn-lg">

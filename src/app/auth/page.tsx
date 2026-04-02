@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/utils/supabase/client';
 import { useUser } from '@/context/AuthContext';
+import { useLoading } from '@/hooks/useAppHooks';
 
 export default function AuthPage() {
   const router = useRouter();
@@ -22,7 +23,7 @@ export default function AuthPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
-  const [loading, setLoading] = useState(false);
+  const { loading, setLoading } = useLoading();
   const [errorMsg, setErrorMsg] = useState('');
   
   const supabase = createClient();
@@ -56,10 +57,10 @@ export default function AuthPage() {
         if (error) throw error;
         
         if (data.user && data.session) {
-          window.dispatchEvent(new CustomEvent('show-toast', { detail: { type: 'success', msg: 'Registration successful! Welcome to Hirely AI.' } }));
+          window.dispatchEvent(new CustomEvent('show-toast', { detail: { type: 'success', msg: 'Registration successful! Your Hirely AI journey starts now.' } }));
           router.push('/dashboard');
         } else {
-          window.dispatchEvent(new CustomEvent('show-toast', { detail: { type: 'success', msg: 'Check your email to verify your account!' } }));
+          window.dispatchEvent(new CustomEvent('show-toast', { detail: { type: 'success', msg: 'Verification email sent! Check your inbox to unlock Hirely AI.' } }));
           setTab('in');
         }
       } else {

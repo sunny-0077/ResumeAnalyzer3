@@ -1,12 +1,36 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useSubscription, UserTier } from '@/hooks/useSubscription';
 import Link from 'next/link';
+import { useEscClose } from '@/hooks/useAppHooks';
+import { fetchWithRetry } from '@/lib/utils';
+import { getRegionData, formatPrice } from '@/lib/pricing';
 
 export default function UpgradeModal() {
   const [isOpen, setIsOpen] = useState(false);
+  const [country, setCountry] = useState('IN');
   const { tier, upgrade } = useSubscription();
+
+  useEscClose(setIsOpen);
+
+  // Use a version identifier to track our manual cache-busting during dev
+  const VERSION_ID = "v_1.0.42_SYNCED"; 
+
+  const region = useMemo(() => getRegionData(country), [country]);
+
+  useEffect(() => {
+    const detect = async () => {
+      try {
+        const res = await fetch('/api/get-country');
+        const data = await res.json();
+        if (data.country) setCountry(data.country);
+      } catch (e) {
+        console.warn('Country detection fallback to default.');
+      }
+    };
+    detect();
+  }, []);
 
   useEffect(() => {
     const handleOpen = () => setIsOpen(true);
@@ -18,7 +42,7 @@ export default function UpgradeModal() {
 
   const handleUpgrade = async (newTier: UserTier) => {
     try {
-      const res = await fetch("/api/create-order", {
+      const res = await fetchWithRetry("/api/create-order", {
         method: "POST",
         body: JSON.stringify({ tier: newTier }),
       });
@@ -32,7 +56,7 @@ export default function UpgradeModal() {
         name: "HirelyAI",
         order_id: order.id,
         handler: async function (response: any) {
-          await fetch("/api/verify-payment", {
+          await fetchWithRetry("/api/verify-payment", {
             method: "POST",
             body: JSON.stringify(response),
           });
@@ -43,13 +67,15 @@ export default function UpgradeModal() {
 
       const rzp = new (window as any).Razorpay(options);
       rzp.open();
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      const msg = err.message === 'Request timed out after 15 seconds' ? 'Transaction timed out. Please check your connection.' : 'Checkout failed.';
+      window.dispatchEvent(new CustomEvent('show-toast', { detail: { type: 'error', msg } }));
     }
   };
 
   return (
-    <div className="modal-overlay" onClick={() => setIsOpen(false)}>
+    <div className="modal-overlay" onClick={() => setIsOpen(false)} data-v-sync={VERSION_ID}>
       <div className="modal-box afu" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '900px' }}>
         <button className="modal-close" onClick={() => setIsOpen(false)}>
           <span className="mat">close</span>
@@ -57,7 +83,7 @@ export default function UpgradeModal() {
         
         <div style={{ padding: '40px' }}>
           <div style={{ textAlign: 'center', marginBottom: '40px' }}>
-            <h2 style={{ fontSize: '32px', fontWeight: 900, letterSpacing: '-0.04em' }}>Choose Your Power-Up 🚀</h2>
+            <h2 style={{ fontSize: '32px', fontWeight: 900, letterSpacing: '-0.04em' }}>Choose Your Global Power-Up 🚀</h2>
             <p style={{ color: 'var(--t3)', fontWeight: 600, marginTop: '8px' }}>Unlock the full potential of Hirely AI and land your dream job faster.</p>
           </div>
 
@@ -66,14 +92,14 @@ export default function UpgradeModal() {
             {/* FREE */}
             <div className="pr-card" style={{ padding: '24px' }}>
               <div className="pr-name">Free</div>
-              <div className="pr-price" style={{ fontSize: '36px' }}>₹0<span style={{ fontSize: '14px' }}>/mo</span></div>
+              <div className="pr-price" style={{ fontSize: '36px' }}>{region.symbol}0<span style={{ fontSize: '14px' }}>/mo</span></div>
               <ul className="pr-list" style={{ margin: '20px 0', gap: '8px', fontSize: '13px' }}>
                 <li className="pr-it"><span className="mat">check</span> 1 ATS Scan/day</li>
                 <li className="pr-it"><span className="mat">check</span> 1 Job Match/day</li>
                 <li className="pr-it no"><span className="mat">lock</span> STAR Coach</li>
                 <li className="pr-it no"><span className="mat">lock</span> Mock Interviews</li>
               </ul>
-              <button className="btn btn-g" style={{ width: '100%' }} disabled={tier === 'free'}>
+              <button className="btn btn-g" style={{ width: '100%', background: 'var(--s1)', color: 'var(--t3)' }} disabled={tier === 'free'}>
                 {tier === 'free' ? 'Current Plan' : 'Downgrade'}
               </button>
             </div>
@@ -82,14 +108,14 @@ export default function UpgradeModal() {
             <div className="pr-card popular" style={{ padding: '24px' }}>
               <div className="pr-tag">MOST POPULAR</div>
               <div className="pr-name">Pro</div>
-              <div className="pr-price" style={{ fontSize: '36px' }}>₹499<span style={{ fontSize: '14px' }}>/mo</span></div>
+              <div className="pr-price" style={{ fontSize: '36px' }}>{formatPrice(region.pro, region.symbol)}<span style={{ fontSize: '14px' }}>/mo</span></div>
               <ul className="pr-list" style={{ margin: '20px 0', gap: '8px', fontSize: '13px' }}>
                 <li className="pr-it"><span className="mat">check</span> Unlimited Scans</li>
                 <li className="pr-it"><span className="mat">check</span> STAR Interview Coach</li>
                 <li className="pr-it"><span className="mat">check</span> Advanced Writer</li>
                 <li className="pr-it no"><span className="mat">lock</span> Mock Interviews</li>
               </ul>
-              <button className="btn btn-p" style={{ width: '100%' }} onClick={() => handleUpgrade('pro')}>
+              <button className="btn btn-p" style={{ width: '100%', background: 'var(--o3)' }} onClick={() => handleUpgrade('pro')}>
                 Upgrade to Pro
               </button>
             </div>
@@ -98,7 +124,7 @@ export default function UpgradeModal() {
             <div className="pr-card valuable" style={{ padding: '24px' }}>
                <div className="pr-tag" style={{ background: 'var(--t1)' }}>BEST VALUE</div>
                <div className="pr-name">Advanced</div>
-               <div className="pr-price" style={{ fontSize: '36px' }}>₹1,199<span style={{ fontSize: '14px' }}>/mo</span></div>
+               <div className="pr-price" style={{ fontSize: '36px' }}>{formatPrice(region.advanced, region.symbol)}<span style={{ fontSize: '14px' }}>/mo</span></div>
                <ul className="pr-list" style={{ margin: '20px 0', gap: '8px', fontSize: '13px' }}>
                  <li className="pr-it"><span className="mat">check</span> Everything in Pro</li>
                  <li className="pr-it"><span className="mat">check</span> Mock Interviews</li>
@@ -123,3 +149,4 @@ export default function UpgradeModal() {
     </div>
   );
 }
+

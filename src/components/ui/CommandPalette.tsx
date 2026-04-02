@@ -1,32 +1,75 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useCommandNavigation, useEscClose } from '@/hooks/useAppHooks';
+import { useUser } from '@/context/AuthContext';
+import { createClient } from '@/utils/supabase/client';
+import { useRef, useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 
 export default function CommandPalette() {
   const router = useRouter();
+  const navigate = useCommandNavigation();
+  const { user, profile } = useUser();
+  const supabase = createClient();
+  const [platformUsers, setPlatformUsers] = useState<any[]>([]);
+  const isAdmin = profile?.role === 'admin';
+
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [dbResults, setDbResults] = useState<any[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const cmdData = [
-    { icon: 'grid_view', label: 'Dashboard', tag: 'Page', cat: 'Pages', action: () => router.push('/dashboard') },
-    { icon: 'manage_search', label: 'Job Match', tag: 'Page', cat: 'Pages', action: () => router.push('/jobmatch') },
-    { icon: 'payments', label: 'Salary Intelligence', tag: 'Page', cat: 'Pages', action: () => router.push('/salary') },
-    { icon: 'mic', label: 'Interview Prep', tag: 'Tool', cat: 'Tools', action: () => showToast('info', 'Opening Interview Prep...') },
-    { icon: 'trending_up', label: 'Career Path Predictor', tag: 'Tool', cat: 'Tools', action: () => showToast('info', 'Starting Predictor...') },
-    { icon: 'description', label: 'Analyze Resume', tag: 'Page', cat: 'Pages', action: () => router.push('/analyzer') },
-    { icon: 'mail', label: 'Cover Letters', tag: 'Tool', cat: 'Tools', action: () => showToast('info', 'Opening Generator...') },
-    { icon: 'upload_file', label: 'Upload New Resume', tag: 'Action', cat: 'Actions', action: () => router.push('/analyzer') },
-    { icon: 'share', label: 'Share Score Card', tag: 'Action', cat: 'Actions', action: () => window.dispatchEvent(new CustomEvent('open-share')) },
-    { icon: 'auto_awesome', label: 'Upgrade to Pro', tag: 'Action', cat: 'Actions', action: () => window.dispatchEvent(new CustomEvent('open-upgrade')) },
-    { icon: 'error_outline', label: 'Error States Demo', tag: 'Page', cat: 'Pages', action: () => router.push('/errors') },
+  useEscClose(setIsOpen);
+
+  const staticCmds = [
+    { icon: 'grid_view', label: 'Dashboard', tag: 'Page', cat: 'Pages', action: () => navigate('/dashboard', setIsOpen) },
+    { icon: 'manage_search', label: 'Job Match', tag: 'Page', cat: 'Pages', action: () => navigate('/jobmatch', setIsOpen) },
+    { icon: 'payments', label: 'Salary Intelligence', tag: 'Page', cat: 'Pages', action: () => navigate('/salary', setIsOpen) },
+    { icon: 'description', label: 'Analyze Resume', tag: 'Page', cat: 'Pages', action: () => navigate('/analyzer', setIsOpen) }
   ];
 
-  const filteredCmd = cmdData.filter(d => 
-    !query || d.label.toLowerCase().includes(query.toLowerCase()) || d.cat.toLowerCase().includes(query.toLowerCase())
-  );
+  useEffect(() => {
+    if (!isOpen || !query || !isAdmin) return;
+    
+    const searchUsers = async () => {
+      const { data } = await supabase
+        .from('profiles')
+        .select('id, full_name, email, tier')
+        .or(`full_name.ilike.%${query}%,email.ilike.%${query}%`)
+        .limit(5);
+      if (data) setPlatformUsers(data);
+    };
+    
+    const timer = setTimeout(searchUsers, 300);
+    return () => clearTimeout(timer);
+  }, [query, isOpen, isAdmin, supabase]);
+
+  useEffect(() => {
+    const performSearch = async () => {
+      if (!query.trim() || !user) {
+        setDbResults([]);
+        return;
+      }
+      
+      const { data: scans } = await supabase.from('user_scans').select('id, filename').eq('user_id', user.id).ilike('filename', `%${query}%`).limit(3);
+      const { data: matches } = await supabase.from('user_matches').select('id, job_title').eq('user_id', user.id).ilike('job_title', `%${query}%`).limit(3);
+      
+      const results = [
+        ...(scans || []).map(s => ({ icon: 'description', label: `Resume: ${s.filename}`, tag: 'Scan', cat: 'Recent Activity', action: () => navigate(`/analyzer?id=${s.id}`, setIsOpen) })),
+        ...(matches || []).map(m => ({ icon: 'work', label: `Match: ${m.job_title}`, tag: 'Job', cat: 'Recent Activity', action: () => navigate(`/jobmatch?id=${m.id}`, setIsOpen) }))
+      ];
+      setDbResults(results);
+    };
+
+    const timer = setTimeout(performSearch, 300);
+    return () => clearTimeout(timer);
+  }, [query, user, supabase]);
+
+  const filteredCmd = [
+    ...staticCmds.filter(d => d.label.toLowerCase().includes(query.toLowerCase())),
+    ...dbResults
+  ];
 
   const showToast = (type: string, msg: string) => {
     window.dispatchEvent(new CustomEvent('show-toast', { detail: { type, msg } }));
@@ -42,7 +85,6 @@ export default function CommandPalette() {
         e.preventDefault();
         handleOpen();
       }
-      if (e.key === 'Escape') setIsOpen(false);
     };
 
     window.addEventListener('open-cmdp', handleOpen);

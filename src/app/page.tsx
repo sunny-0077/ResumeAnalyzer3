@@ -1,14 +1,50 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import Navbar from '@/components/layout/Navbar';
+import Link from "next/link";
 import { useRouter } from 'next/navigation';
 import { useUser } from '@/context/AuthContext';
+import { getRegionData, formatPrice } from '@/lib/pricing';
+import { useLoading } from '@/hooks/useAppHooks';
+import { createClient } from "@/utils/supabase/client";
 
 export default function LandingPage() {
+  const [stats, setStats] = useState({ scans: '2,481,902', matches: '1,204,551', users: '450k+' });
+  const supabase = createClient();
+
+  useEffect(() => {
+    const fetchLiveStats = async () => {
+      const { count: scans } = await supabase.from('user_scans').select('*', { count: 'exact', head: true });
+      const { count: matches } = await supabase.from('user_matches').select('*', { count: 'exact', head: true });
+      
+      if (scans || matches) {
+        setStats({
+          scans: (scans || 0).toLocaleString(),
+          matches: (matches || 0).toLocaleString(),
+          users: '450k+' // Static for now as it's a marketing figure
+        });
+      }
+    };
+    fetchLiveStats();
+  }, [supabase]);
   const router = useRouter();
   const { user, isLoading } = useUser();
   const [isAnnual, setIsAnnual] = useState(false);
+  const [country, setCountry] = useState('IN');
+
+  const region = useMemo(() => getRegionData(country), [country]);
+
+  useEffect(() => {
+    const detect = async () => {
+      try {
+        const res = await fetch('/api/get-country');
+        const data = await res.json();
+        if (data.country) setCountry(data.country);
+      } catch (e) {}
+    };
+    detect();
+  }, []);
 
   // Redirect if logged in
   useEffect(() => {
@@ -21,6 +57,7 @@ export default function LandingPage() {
   const [demoState, setDemoState] = useState<'idle' | 'loading' | 'result'>('idle');
   const [demoScore, setDemoScore] = useState(0);
   const [unlocked, setUnlocked] = useState(false);
+  const { loading: demoLoading, setLoading: setDemoLoading } = useLoading();
   const [counts, setCounts] = useState({ analyses: 0, offers: 0, score: 0, time: 0 });
   const [signupCount, setSignupCount] = useState(12847);
   const [tab, setTab] = useState<'plans' | 'redeem'>('plans');
@@ -61,10 +98,12 @@ export default function LandingPage() {
       showToast("error","Upload resume first");
       return;
     }
+    setDemoLoading(true);
     setDemoState('loading');
     setTimeout(() => {
       setDemoState('result');
       setDemoScore(Math.floor(Math.random() * 30) + 65);
+      setDemoLoading(false);
     }, 2000);
   };
 
@@ -246,10 +285,25 @@ export default function LandingPage() {
                 <span className="save-badge">Save 33%</span>
               </div>
               
+              <div className="stats-row" style={{ display: 'flex', gap: '20px', justifyContent: 'center', marginBottom: '40px' }}>
+                <div className="stat-card">
+                  <div className="stat-v">{stats.scans}</div>
+                  <div className="stat-l">Resumes Scanned</div>
+                </div>
+                <div className="stat-card">
+                  <div className="stat-v">{stats.matches}</div>
+                  <div className="stat-l">Job Matches Found</div>
+                </div>
+                <div className="stat-card">
+                  <div className="stat-v">{stats.users}</div>
+                  <div className="stat-l">Active Users</div>
+                </div>
+              </div>
+              
               <div className="pricing-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '32px' }}>
                 <div className="pricing-card">
                   <div className="pricing-name">Free</div>
-                  <div className="pricing-price">₹0</div>
+                  <div className="pricing-price">{region.symbol}0</div>
                   <ul className="pricing-ul">
                     <li><span className="mat">check</span> 1 resume analysis/day</li>
                     <li><span className="mat">check</span> 1 job match/day</li>
@@ -262,7 +316,12 @@ export default function LandingPage() {
                 <div className="pricing-card feat">
                   <div className="pricing-pop">Popular</div>
                   <div className="pricing-name">Pro</div>
-                  <div className="pricing-price">{isAnnual ? '₹3,999' : '₹499'}<span>/{isAnnual ? 'yr' : 'mo'}</span></div>
+                  <div className="pricing-price">
+                    {country === 'IN' 
+                      ? (isAnnual ? '₹5,999' : '₹599') 
+                      : (isAnnual ? '$149' : '$15')}
+                    <span>/{isAnnual ? 'yr' : 'mo'}</span>
+                  </div>
                   <ul className="pricing-ul">
                     <li><span className="mat">check</span> Unlimited Resume Scans</li>
                     <li><span className="mat">check</span> STAR Interview Coach</li>
@@ -274,7 +333,12 @@ export default function LandingPage() {
 
                 <div className="pricing-card" style={{ border: '2px solid var(--t1)' }}>
                   <div className="pricing-name">Advanced</div>
-                  <div className="pricing-price">{isAnnual ? '₹9,999' : '₹1,199'}<span>/{isAnnual ? 'yr' : 'mo'}</span></div>
+                  <div className="pricing-price">
+                    {country === 'IN' 
+                      ? (isAnnual ? '₹13,999' : '₹1,399') 
+                      : (isAnnual ? '$389' : '$39')}
+                    <span>/{isAnnual ? 'yr' : 'mo'}</span>
+                  </div>
                   <ul className="pricing-ul">
                     <li><span className="mat">check</span> Everything in Pro</li>
                     <li><span className="mat">check</span> Mock Interviews AI</li>
@@ -296,7 +360,7 @@ export default function LandingPage() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxWidth: '400px', margin: '0 auto' }}>
                 <input 
                   className="email-input" 
-                  style={{ height: '60px', borderRadius: '18px', textTransform: 'uppercase', textAlign: 'center', fontWeight: 900, fontSize: '24px', letterSpacing: '0.2em', border: '1.5px solid var(--bd)' }} 
+                  style={{ height: '60px', borderRadius: '18px', textTransform: 'uppercase', textAlign: 'center', fontWeight: 900, fontSize: '24px', letterSpacing: '0.2em', border: '1.5px solid var(--border)' }} 
                   placeholder="XYZ-123" 
                   value={coupon}
                   onChange={e => setCoupon(e.target.value)}
@@ -327,6 +391,18 @@ export default function LandingPage() {
           </div>
         </div>
       </div>
+
+      <style jsx>{`
+        @media (max-width: 768px) {
+          .hero-h1 { font-size: 40px !important; line-height: 1.1 !important; }
+          .hero-p { font-size: 16px !important; }
+          .hero-wrap { padding-top: 60px !important; flex-direction: column !important; text-align: center !important; }
+          .hero-ctas { justify-content: center !important; }
+          .hero-wrap > div:last-child { height: 300px !important; margin-top: 40px !important; }
+          .counter-grid { grid-template-columns: 1fr 1fr !important; gap: 24px !important; }
+          .counter-label { font-size: 10px !important; }
+        }
+      `}</style>
 
       <div className="site-footer">
         <div className="footer-logo">Hirely AI</div>

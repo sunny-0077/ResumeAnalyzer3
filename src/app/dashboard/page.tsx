@@ -6,200 +6,177 @@ import Navbar from '@/components/layout/Navbar';
 import Sidebar from '@/components/layout/Sidebar';
 import MobileBottomNav from '@/components/layout/MobileBottomNav';
 import { useUser } from '@/context/AuthContext';
+import { createClient } from '@/utils/supabase/client';
+import Link from 'next/link';
 
 export default function Dashboard() {
   const router = useRouter();
   const { user, isLoading } = useUser();
   const [stats, setStats] = useState({ resumes: 0, bestMatch: 0, coverLetters: 0, pipelines: 0 });
   const [animatedStats, setAnimatedStats] = useState({ resumes: 0, bestMatch: 0, coverLetters: 0, pipelines: 0 });
+  const [recentScans, setRecentScans] = useState<any[]>([]);
+  const supabase = createClient();
 
-  // Derive user's real data from user_metadata (persisted forever in Supabase)
-  const userStats = user?.user_metadata?.stats || { resumes: 0, bestMatch: 0, coverLetters: 0, pipelines: 0 };
-  const hasActivity = user?.user_metadata?.has_activity === true;
   const displayName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'there';
+  const hasActivity = stats.resumes > 0;
 
-  // Animate counters when data loads
   useEffect(() => {
-    if (hasActivity) {
-      const targets = userStats;
-      const duration = 1200;
-      const start = Date.now();
+    const fetchLiveStats = async () => {
+      if (user) {
+        const { count: scanCount } = await supabase.from('user_scans').select('*', { count: 'exact', head: true }).eq('user_id', user.id);
+        const { data: matchData } = await supabase.from('user_matches').select('best_score').eq('user_id', user.id).order('best_score', { ascending: false }).limit(1);
+        const { count: letterCount } = await supabase.from('user_letters').select('*', { count: 'exact', head: true }).eq('user_id', user.id);
+        const { count: pipelineCount } = await supabase.from('user_job_pipeline').select('*', { count: 'exact', head: true }).eq('user_id', user.id);
+        const { data: recent } = await supabase.from('user_scans').select('*').eq('user_id', user.id).order('created_at', { ascending: false }).limit(3);
+        
+        const liveStats = {
+          resumes: scanCount || 0,
+          bestMatch: matchData?.[0]?.best_score || 0,
+          coverLetters: letterCount || 0,
+          pipelines: pipelineCount || 0
+        };
+        
+        setStats(liveStats);
+        if (recent) setRecentScans(recent);
+        
+        // Trigger animation
+        const duration = 1200;
+        const start = Date.now();
+        const animate = () => {
+          const elapsed = Date.now() - start;
+          const progress = Math.min(elapsed / duration, 1);
+          const ease = 1 - Math.pow(1 - progress, 4);
 
-      const animate = () => {
-        const elapsed = Date.now() - start;
-        const progress = Math.min(elapsed / duration, 1);
-        const ease = 1 - Math.pow(1 - progress, 4);
+          setAnimatedStats({
+            resumes: Math.round(ease * liveStats.resumes),
+            bestMatch: Math.round(ease * liveStats.bestMatch),
+            coverLetters: Math.round(ease * liveStats.coverLetters),
+            pipelines: Math.round(ease * liveStats.pipelines),
+          });
 
-        setAnimatedStats({
-          resumes: Math.round(ease * targets.resumes),
-          bestMatch: Math.round(ease * targets.bestMatch),
-          coverLetters: Math.round(ease * targets.coverLetters),
-          pipelines: Math.round(ease * targets.pipelines),
-        });
-
-        if (progress < 1) requestAnimationFrame(animate);
-      };
-      requestAnimationFrame(animate);
-    }
-  }, [hasActivity]);
+          if (progress < 1) requestAnimationFrame(animate);
+        };
+        requestAnimationFrame(animate);
+      }
+    };
+    fetchLiveStats();
+  }, [user, supabase]);
 
   const openShare = () => window.dispatchEvent(new CustomEvent('open-share'));
 
-  // Show skeleton while auth is loading
-  if (isLoading) {
-    return (
-      <div id="page-dashboard" className="afi">
-        <Navbar />
-        <div className="app-shell">
-          <Sidebar />
-          <main className="main">
-            <div className="afu">
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '32px' }}>
-                <div><div className="skel" style={{ height: '32px', width: '280px', marginBottom: '8px' }}></div><div className="skel" style={{ height: '16px', width: '340px' }}></div></div>
-                <div className="skel" style={{ height: '44px', width: '140px', borderRadius: '14px' }}></div>
-              </div>
-              <div className="stat-row">
-                {[1,2,3,4].map(i => <div key={i} className="stat-card"><div className="skel" style={{ height: '48px', width: '48px', borderRadius: '12px', marginBottom: '16px' }}></div><div className="skel" style={{ height: '32px', width: '80px', marginBottom: '8px' }}></div><div className="skel" style={{ height: '14px', width: '120px' }}></div></div>)}
-              </div>
-              <div className="dash-grid-2">
-                <div className="dash-card"><div className="skel" style={{ height: '24px', width: '200px', marginBottom: '20px' }}></div><div className="skel" style={{ height: '300px', borderRadius: '16px' }}></div></div>
-                <div className="dash-card"><div className="skel" style={{ height: '24px', width: '160px', marginBottom: '20px' }}></div><div className="skel-list">{[1,2,3,4].map(i => <div key={i} className="skel" style={{ height: '60px', borderRadius: '12px', marginBottom: '12px' }}></div>)}</div></div>
-              </div>
-            </div>
-          </main>
-        </div>
-        <MobileBottomNav />
-      </div>
-    );
-  }
-
   return (
-    <div id="page-dashboard" className="afi">
+    <div className="afi">
       <Navbar />
       <div className="app-shell">
         <Sidebar />
-        <main className="main">
-
-          {/* ========== EMPTY STATE — New User ========== */}
-          {!hasActivity && (
-            <div className="afu" style={{ textAlign: 'center', padding: '80px 20px' }}>
-              <div style={{ width: '100px', height: '100px', background: 'var(--o6)', borderRadius: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 28px', boxShadow: '0 8px 32px rgba(163,61,0,.12)' }}>
-                <span className="mat" style={{ fontSize: '48px', color: 'var(--o3)' }}>rocket_launch</span>
-              </div>
-              <h2 style={{ fontSize: '36px', fontWeight: 900, marginBottom: '12px', color: 'var(--t1)' }}>
-                Welcome, {displayName}! 🎉
-              </h2>
-              <p style={{ fontSize: '17px', color: 'var(--t2)', maxWidth: '500px', margin: '0 auto 12px', lineHeight: 1.6, fontWeight: 500 }}>
-                Your career command center is ready. Upload your first resume to unlock AI-powered insights, job matching, and more.
+        <main className="main" style={{ padding: '32px 48px' }}>
+          
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '32px' }}>
+            <div className="pg-hdr" style={{ marginBottom: 0 }}>
+              <h1 style={{ fontSize: '32px', fontWeight: 900, color: 'var(--t1)' }}>
+                {isLoading ? <div className="sk" style={{ width: '240px', height: '36px' }}></div> : `Welcome back, ${displayName.split(' ')[0]} 👋`}
+              </h1>
+              <p style={{ color: 'var(--t3)', fontWeight: 600, marginTop: '4px' }}>
+                {isLoading ? <div className="sk" style={{ width: '320px', height: '16px', marginTop: '8px' }}></div> : "Here's what's happening with your career tracking."}
               </p>
-              <p style={{ fontSize: '14px', color: 'var(--t3)', maxWidth: '440px', margin: '0 auto 40px', fontWeight: 600 }}>
-                Everything you do here is saved to your account forever — across all devices.
-              </p>
-
-              <div style={{ display: 'flex', gap: '16px', justifyContent: 'center', flexWrap: 'wrap', marginBottom: '48px' }}>
-                <button className="btn btn-p btn-lg" onClick={() => router.push('/analyzer')} style={{ padding: '16px 36px', fontSize: '16px' }}>
-                  <span className="mat" style={{ marginRight: '8px' }}>upload_file</span> Upload Resume
-                </button>
-                <button className="btn btn-s btn-lg" onClick={() => router.push('/jobmatch')} style={{ padding: '16px 36px', fontSize: '16px' }}>
-                  <span className="mat" style={{ marginRight: '8px' }}>auto_awesome</span> Match a Job
-                </button>
-              </div>
-
-              {/* Quick start cards */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px', maxWidth: '800px', margin: '0 auto' }}>
-                <div className="dash-card" style={{ padding: '28px', textAlign: 'left', cursor: 'pointer', transition: 'all .2s' }} onClick={() => router.push('/analyzer')}>
-                  <div style={{ width: '44px', height: '44px', background: 'var(--o6)', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px' }}>
-                    <span className="mat" style={{ color: 'var(--o2)' }}>description</span>
-                  </div>
-                  <h4 style={{ fontWeight: 800, marginBottom: '6px', fontSize: '15px' }}>Analyze Resume</h4>
-                  <p style={{ fontSize: '13px', color: 'var(--t3)', fontWeight: 500, lineHeight: 1.5 }}>Get an ATS score and AI feedback on your resume.</p>
-                </div>
-                <div className="dash-card" style={{ padding: '28px', textAlign: 'left', cursor: 'pointer', transition: 'all .2s' }} onClick={() => router.push('/jobmatch')}>
-                  <div style={{ width: '44px', height: '44px', background: 'var(--gbg)', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px' }}>
-                    <span className="mat" style={{ color: 'var(--green)' }}>manage_search</span>
-                  </div>
-                  <h4 style={{ fontWeight: 800, marginBottom: '6px', fontSize: '15px' }}>Match Jobs</h4>
-                  <p style={{ fontSize: '13px', color: 'var(--t3)', fontWeight: 500, lineHeight: 1.5 }}>Find roles that fit your skills perfectly.</p>
-                </div>
-                <div className="dash-card" style={{ padding: '28px', textAlign: 'left', cursor: 'pointer', transition: 'all .2s' }} onClick={() => router.push('/cover-letter')}>
-                  <div style={{ width: '44px', height: '44px', background: 'var(--pbg)', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px' }}>
-                    <span className="mat" style={{ color: 'var(--purple)' }}>mail</span>
-                  </div>
-                  <h4 style={{ fontWeight: 800, marginBottom: '6px', fontSize: '15px' }}>Cover Letter</h4>
-                  <p style={{ fontSize: '13px', color: 'var(--t3)', fontWeight: 500, lineHeight: 1.5 }}>Generate a tailored cover letter with AI.</p>
-                </div>
-              </div>
             </div>
+            {!isLoading && (
+              <Link href="/analyzer" className="btn btn-p" style={{ padding: '12px 24px', fontWeight: 800 }}>
+                <span className="mat" style={{ fontSize: '20px' }}>upload_file</span> Analyze New Resume
+              </Link>
+            )}
+            {isLoading && <div className="sk" style={{ width: '180px', height: '48px', borderRadius: '12px' }}></div>}
+          </div>
+
+          {isLoading ? (
+            <>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '20px' }}>
+                {[1, 2, 3, 4].map(i => (
+                  <div key={i} className="card sk" style={{ height: '140px' }}></div>
+                ))}
+              </div>
+              <div style={{ marginTop: '32px', display: 'grid', gridTemplateColumns: '2fr 1.2fr', gap: '32px' }}>
+                <div className="card sk" style={{ height: '400px' }}></div>
+                <div className="card sk" style={{ height: '400px' }}></div>
+              </div>
+            </>
+          ) : (
+            <>
+              {!hasActivity ? (
+                <div className="afu" style={{ textAlign: 'center', padding: '60px 20px' }}>
+                  <div style={{ width: '80px', height: '80px', background: 'var(--o6)', borderRadius: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px' }}>
+                    <span className="mat" style={{ fontSize: '40px', color: 'var(--o3)' }}>rocket_launch</span>
+                  </div>
+                  <h2 style={{ fontSize: '28px', fontWeight: 900, marginBottom: '12px' }}>Ready to launch?</h2>
+                  <p style={{ color: 'var(--t3)', maxWidth: '460px', margin: '0 auto 32px', fontWeight: 600 }}>Analyze your first resume to unlock AI insights and personalized job matching.</p>
+                  <button className="btn btn-p" onClick={() => router.push('/analyzer')} style={{ padding: '16px 36px' }}>Get Started</button>
+                </div>
+              ) : (
+                <div className="afu">
+                  <div className="stat-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '20px' }}>
+                    <div className="card" style={{ padding: '24px' }}>
+                      <div style={{ width: '40px', height: '40px', borderRadius: '12px', background: 'var(--o6)', color: 'var(--o2)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px' }}>
+                        <span className="mat">description</span>
+                      </div>
+                      <div style={{ fontSize: '28px', fontWeight: 900 }}>{animatedStats.resumes}</div>
+                      <div style={{ fontSize: '11px', fontWeight: 800, color: 'var(--t4)', textTransform: 'uppercase' }}>Resumes Analyzed</div>
+                    </div>
+                    <div className="card" style={{ padding: '24px' }}>
+                      <div style={{ width: '40px', height: '40px', borderRadius: '12px', background: 'var(--gbg)', color: 'var(--green)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px' }}>
+                        <span className="mat">verified</span>
+                      </div>
+                      <div style={{ fontSize: '28px', fontWeight: 900 }}>{animatedStats.bestMatch}%</div>
+                      <div style={{ fontSize: '11px', fontWeight: 800, color: 'var(--t4)', textTransform: 'uppercase' }}>Best Match Score</div>
+                    </div>
+                    <div className="card" style={{ padding: '24px' }}>
+                      <div style={{ width: '40px', height: '40px', borderRadius: '12px', background: 'var(--pbg)', color: 'var(--purple)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px' }}>
+                        <span className="mat">mail</span>
+                      </div>
+                      <div style={{ fontSize: '28px', fontWeight: 900 }}>{animatedStats.coverLetters}</div>
+                      <div style={{ fontSize: '11px', fontWeight: 800, color: 'var(--t4)', textTransform: 'uppercase' }}>Letters Sent</div>
+                    </div>
+                    <div className="card" style={{ padding: '24px' }}>
+                      <div style={{ width: '40px', height: '40px', borderRadius: '12px', background: 'var(--s2)', color: 'var(--t2)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px' }}>
+                        <span className="mat">view_kanban</span>
+                      </div>
+                      <div style={{ fontSize: '28px', fontWeight: 900 }}>{animatedStats.pipelines}</div>
+                      <div style={{ fontSize: '11px', fontWeight: 800, color: 'var(--t4)', textTransform: 'uppercase' }}>Active Pipelines</div>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1.8fr 1.2fr', gap: '32px', marginTop: '32px' }}>
+                    <div className="card" style={{ padding: '24px' }}>
+                      <h3 style={{ fontSize: '18px', fontWeight: 800, marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span className="mat" style={{ color: 'var(--o1)' }}>history</span> Recent Activity
+                      </h3>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                        {recentScans.map((s, i) => (
+                          <div key={i} style={{ padding: '16px', background: 'var(--sf)', borderRadius: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div>
+                              <div style={{ fontSize: '14px', fontWeight: 800 }}>{s.filename}</div>
+                              <div style={{ fontSize: '11px', color: 'var(--t3)', fontWeight: 600 }}>Analyzed on {new Date(s.created_at).toLocaleDateString()}</div>
+                            </div>
+                            <div style={{ fontSize: '16px', fontWeight: 900, color: 'var(--o2)' }}>{s.score}%</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="card" style={{ padding: '24px' }}>
+                      <h3 style={{ fontSize: '18px', fontWeight: 800, marginBottom: '20px' }}>AI Career Tips</h3>
+                      <div style={{ padding: '20px', background: 'var(--o7)', borderRadius: '20px', border: '1.5px dashed var(--o5)' }}>
+                        <p style={{ fontSize: '14px', lineHeight: 1.6, color: 'var(--o1)', fontWeight: 700 }}>
+                          ✦ Your Resume is matching 92% of Tech PM roles. Try optimizing your 'Cloud Architecture' section to hit that 95% mark.
+                        </p>
+                      </div>
+                      <button className="btn btn-s" style={{ width: '100%', marginTop: '20px' }} onClick={() => router.push('/analyzer')}>Improve My Score</button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </>
           )}
 
-          {/* ========== LOADED STATE — Returning User with Activity ========== */}
-          {hasActivity && (
-            <div className="afu">
-              <div className="dash-header">
-                <div>
-                  <h1 style={{ fontSize: '36px', fontWeight: 900, color: 'var(--t1)' }}>Welcome back, {displayName}! 👋</h1>
-                  <p style={{ color: 'var(--t2)', marginTop: '4px', fontWeight: 600 }}>
-                    {userStats.resumes > 0 ? `You have ${userStats.resumes} resume${userStats.resumes > 1 ? 's' : ''} analyzed.` : 'Your career dashboard is ready.'}
-                  </p>
-                </div>
-                <div style={{ display: 'flex', gap: '12px' }}>
-                  <button className="btn btn-s" onClick={openShare}>
-                    <span className="mat" style={{ marginRight: '6px' }}>share</span> Share Score
-                  </button>
-                  <button className="btn btn-p" onClick={() => router.push('/jobmatch')}>
-                    <span className="mat" style={{ marginRight: '6px' }}>rocket_launch</span> Match a Job
-                  </button>
-                </div>
-              </div>
-
-              <div className="stat-grid">
-                <div className="scard afu" style={{ animationDelay: '100ms' }}>
-                  <div className="scard-icon" style={{ background: 'var(--o6)', color: 'var(--o2)' }}><span className="mat">description</span></div>
-                  <div className="scard-num">{animatedStats.resumes}</div>
-                  <div className="scard-label">Total Resumes</div>
-                </div>
-                <div className="scard afu" style={{ animationDelay: '200ms' }}>
-                  <div className="scard-icon" style={{ background: 'var(--gbg)', color: 'var(--green)' }}><span className="mat">verified</span></div>
-                  <div className="scard-num">{animatedStats.bestMatch > 0 ? `${animatedStats.bestMatch}%` : '—'}</div>
-                  <div className="scard-label">Best Match Score</div>
-                </div>
-                <div className="scard afu" style={{ animationDelay: '300ms' }}>
-                  <div className="scard-icon" style={{ background: 'var(--pbg)', color: 'var(--purple)' }}><span className="mat">mail</span></div>
-                  <div className="scard-num">{animatedStats.coverLetters}</div>
-                  <div className="scard-label">Cover Letters</div>
-                </div>
-                <div className="scard afu" style={{ animationDelay: '400ms' }}>
-                  <div className="scard-icon" style={{ background: 'var(--s2)', color: 'var(--t2)' }}><span className="mat">view_kanban</span></div>
-                  <div className="scard-num">{animatedStats.pipelines}</div>
-                  <div className="scard-label">Job Pipelines</div>
-                </div>
-              </div>
-
-              {/* Quick Actions */}
-              <div className="qa-grid afu" style={{ animationDelay: '500ms', gridTemplateColumns: 'repeat(5, 1fr)' }}>
-                <div className="qa-item" onClick={() => router.push('/analyzer')}>
-                  <div className="qa-icon" style={{ background: 'var(--o6)', color: 'var(--o2)' }}><span className="mat">upload_file</span></div>
-                  <div className="qa-info"><h4>Analyze</h4><p>Score Resume</p></div>
-                </div>
-                <div className="qa-item" onClick={() => router.push('/jobmatch')}>
-                  <div className="qa-icon" style={{ background: 'var(--gbg)', color: 'var(--green)' }}><span className="mat">auto_awesome</span></div>
-                  <div className="qa-info"><h4>Match</h4><p>AI Matching</p></div>
-                </div>
-                <div className="qa-item" onClick={() => router.push('/cover-letter')}>
-                  <div className="qa-icon" style={{ background: 'var(--pbg)', color: 'var(--purple)' }}><span className="mat">description</span></div>
-                  <div className="qa-info"><h4>Letter</h4><p>Drafting AI</p></div>
-                </div>
-                <div className="qa-item" onClick={() => router.push('/jobs')}>
-                  <div className="qa-icon" style={{ background: 'var(--s2)', color: 'var(--t2)' }}><span className="mat">view_kanban</span></div>
-                  <div className="qa-info"><h4>Tracker</h4><p>Kanban Board</p></div>
-                </div>
-                <div className="qa-item" onClick={() => router.push('/salary')}>
-                  <div className="qa-icon" style={{ background: 'var(--bbg)', color: 'var(--blue)' }}><span className="mat">payments</span></div>
-                  <div className="qa-info"><h4>Salary</h4><p>Intel Hub</p></div>
-                </div>
-              </div>
-            </div>
-          )}
         </main>
       </div>
       <MobileBottomNav />

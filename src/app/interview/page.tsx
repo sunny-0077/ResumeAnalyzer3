@@ -5,13 +5,32 @@ import Navbar from '@/components/layout/Navbar';
 import Sidebar from '@/components/layout/Sidebar';
 import MobileBottomNav from '@/components/layout/MobileBottomNav';
 import { useSubscription } from '@/hooks/useSubscription';
+import { useInterviewTimer, useLoading, useEscClose } from '@/hooks/useAppHooks';
+import { checkCompletion, resetInterviewState } from '@/lib/utils';
+import { useUser } from '@/context/AuthContext';
+import { createClient } from '@/utils/supabase/client';
 
 export default function InterviewPrep() {
   const [mode, setMode] = useState<'text' | 'voice'>('text');
   const [ans, setAns] = useState('');
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const { loading: isAnalyzing, setLoading: setIsAnalyzing } = useLoading();
   const { tier } = useSubscription();
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [questions, setQuestions] = useState([
+    "Tell me about yourself and your professional background. What brings you here today?",
+    "Describe a difficult challenge you faced at work and how you overcame it.",
+    "Where do you see yourself in five years?"
+  ]);
+  const [answers, setAnswers] = useState<string[]>([]);
+  const { user } = useUser();
+  const supabase = createClient();
+  const [sessionHistory, setSessionHistory] = useState<any[]>([]);
+  const [cooldown, setCooldown] = useState(false);
   
+  const timer = useInterviewTimer(600); // 10 minute session
+  
+  useEscClose(() => setShowReport(false));
+
   // Simulated Analysis State
   const [stats, setStats] = useState({
     clarity: 0,
@@ -28,23 +47,57 @@ export default function InterviewPrep() {
 
   const [showReport, setShowReport] = useState(false);
 
+  useEffect(() => {
+    const fetchHistory = async () => {
+      if (user) {
+        const { data } = await supabase.from('user_interviews').select('*').eq('user_id', user.id).order('created_at', { ascending: false });
+        if (data) setSessionHistory(data);
+      }
+    };
+    fetchHistory();
+  }, [user, supabase]);
+
   const handleSubmit = () => {
+    if (cooldown) return;
     if (tier !== 'advanced') {
       window.dispatchEvent(new CustomEvent('open-upgrade'));
       return;
     }
     setIsAnalyzing(true);
+    setCooldown(true);
     // Simulate real-time update
     setTimeout(() => {
       setStats({ clarity: 88, confidence: 74, relevance: 96 });
       setStar({ s: true, t: true, a: true, r: true });
       setIsAnalyzing(false);
       window.dispatchEvent(new CustomEvent('show-toast', { detail: { type: 'success', msg: 'Answer Analyzed! Feedback updated.' } }));
+      
+      const nextIdx = currentIndex + 1;
+      setAnswers([...answers, ans]);
+      if (!checkCompletion(nextIdx, questions.length, setShowReport)) {
+        setCurrentIndex(nextIdx);
+        setAns('');
+      }
+      setTimeout(() => setCooldown(false), 1500);
     }, 2000);
   };
 
-  const handleEndSession = () => {
+  const handleEndSession = async () => {
+    if (user && answers.length > 0) {
+      await supabase.from('user_interviews').insert({
+        user_id: user.id,
+        score: 82,
+        feedback: { clarity: stats.clarity, confidence: stats.confidence, relevance: stats.relevance },
+        answers: answers
+      });
+    }
     setShowReport(true);
+  };
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
   return (
@@ -58,9 +111,13 @@ export default function InterviewPrep() {
             <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
               <h1 style={{ fontSize: '20px', fontWeight: 900 }}>Interview Prep</h1>
               <span className="badge bo" style={{ fontSize: '10px' }}>General Behavioral</span>
+              <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '8px', background: 'var(--o6)', color: 'var(--o2)', padding: '6px 14px', borderRadius: '10px', fontSize: '13px', fontWeight: 800 }}>
+                <span className="mat" style={{ fontSize: '18px' }}>timer</span>
+                {formatTime(timer)}
+              </div>
             </div>
             <div className="ip-prog-label">
-              Session progress <span className="ip-prog-val">Q1 of 10</span>
+              Session progress <span className="ip-prog-val">Q{currentIndex + 1} of {questions.length}</span>
             </div>
           </div>
 
@@ -75,10 +132,10 @@ export default function InterviewPrep() {
                   <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
                     <span className="badge bo">BEHAVIORAL</span>
                     <span className="badge bgy">EASY</span>
-                    <span style={{ marginLeft: 'auto', fontSize: '11px', fontWeight: 700, color: 'var(--t4)' }}>Question 1 / 10</span>
+                    <span style={{ marginLeft: 'auto', fontSize: '11px', fontWeight: 700, color: 'var(--t4)' }}>Question {currentIndex + 1} / {questions.length}</span>
                   </div>
                   <h2 style={{ fontSize: '22px', fontWeight: 800, lineHeight: 1.4, color: 'var(--t1)', marginBottom: '16px' }}>
-                    "Tell me about yourself and your professional background. What brings you here today?"
+                    "{questions[currentIndex]}"
                   </h2>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '12px', color: 'var(--t3)', fontWeight: 600 }}>
                     <span className="mat" style={{ fontSize: '18px' }}>lightbulb</span>
@@ -229,8 +286,14 @@ export default function InterviewPrep() {
                     <span style={{ fontSize: '12px', color: 'var(--t4)', fontWeight: 700 }}>{ans.split(/\s+/).filter(Boolean).length} words</span>
                     <div style={{ display: 'flex', gap: '12px' }}>
                       <button className="btn btn-g" style={{ padding: '12px 32px' }}>Skip</button>
-                      <button className="btn btn-p" style={{ padding: '12px 40px', fontSize: '15px' }} onClick={handleSubmit}>
-                        Submit Answer <span className="mat" style={{ fontSize: '18px', marginLeft: '8px' }}>arrow_forward</span>
+                      <button 
+                        className="btn btn-p" 
+                        style={{ padding: '12px 40px', fontSize: '15px' }} 
+                        onClick={handleSubmit}
+                        disabled={isAnalyzing || cooldown}
+                      >
+                        {isAnalyzing ? "Analyzing..." : "Submit Answer"} 
+                        <span className="mat" style={{ fontSize: '18px', marginLeft: '8px' }}>{isAnalyzing ? 'sync' : 'arrow_forward'}</span>
                       </button>
                     </div>
                   </div>
@@ -246,15 +309,15 @@ export default function InterviewPrep() {
                   <h3 style={{ fontSize: '11px', fontWeight: 800, color: 'var(--t4)', textTransform: 'uppercase', marginBottom: '16px' }}>Session Stats</h3>
                   <div className="ip-stat-grid">
                     <div className="ip-stat-i">
-                      <h4>0</h4>
+                      <h4>{currentIndex}</h4>
                       <span>Done</span>
                     </div>
                     <div className="ip-stat-i">
-                      <h4 style={{ color: 'var(--o3)' }}>--</h4>
+                      <h4 style={{ color: 'var(--o3)' }}>{Math.round(stats.clarity/3 + stats.confidence/3 + stats.relevance/3) || '--'}</h4>
                       <span>Avg Score</span>
                     </div>
                     <div className="ip-stat-i">
-                      <h4>10</h4>
+                      <h4>{questions.length - currentIndex}</h4>
                       <span>Left</span>
                     </div>
                   </div>
@@ -306,11 +369,22 @@ export default function InterviewPrep() {
 
                 {/* PREVIOUS ANSWERS */}
                 <div className="ip-card">
-                  <h3 style={{ fontSize: '11px', fontWeight: 800, color: 'var(--t4)', textTransform: 'uppercase', marginBottom: '12px' }}>Previous Answers</h3>
-                  <div style={{ textAlign: 'center', padding: '20px 0', opacity: 0.5, fontSize: '12px', fontWeight: 600 }}>
-                    No sessions recorded yet.
-                  </div>
-                  <button className="btn btn-g btn-sm" style={{ width: '100%', marginTop: '8px' }} onClick={handleEndSession}>End Session Early</button>
+                  <h3 style={{ fontSize: '11px', fontWeight: 800, color: 'var(--t4)', textTransform: 'uppercase', marginBottom: '12px' }}>Previous Sessions</h3>
+                  {sessionHistory.length > 0 ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      {sessionHistory.map((s, i) => (
+                        <div key={i} style={{ padding: '10px', background: 'var(--sf)', borderRadius: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontSize: '12px', fontWeight: 800 }}>ID #{s.id.toString().substring(0, 4)}</span>
+                          <span style={{ fontSize: '12px', fontWeight: 900, color: 'var(--o2)' }}>{s.score}%</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div style={{ textAlign: 'center', padding: '20px 0', opacity: 0.5, fontSize: '12px', fontWeight: 600 }}>
+                      No sessions recorded yet.
+                    </div>
+                  )}
+                  <button className="btn btn-g btn-sm" style={{ width: '100%', marginTop: '12px' }} onClick={handleEndSession}>End Session Early</button>
                 </div>
 
               </div>

@@ -1,44 +1,71 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Navbar from '@/components/layout/Navbar';
 import Sidebar from '@/components/layout/Sidebar';
 import MobileBottomNav from '@/components/layout/MobileBottomNav';
+import { useUser } from '@/context/AuthContext';
 import { useSubscription } from '@/hooks/useSubscription';
-
-type AppTemplate = {
-  id: number;
-  name: string;
-  img: string;
-  category: string;
-  isPro: boolean;
-};
-
-const TEMPLATES: AppTemplate[] = [
-  { id: 1, name: 'Kinetic Standard (ATS)', img: 'https://images.unsplash.com/photo-1586281380349-632531db7ed4?w=400&h=560&fit=crop', category: 'Tech & Engineering', isPro: false },
-  { id: 2, name: 'Modern Executive', img: 'https://images.unsplash.com/photo-1586282391215-684c85116790?w=400&h=560&fit=crop', category: 'Management', isPro: true },
-  { id: 3, name: 'Creative Portfolio', img: 'https://images.unsplash.com/photo-1586282391129-76a6ceb20454?w=400&h=560&fit=crop', category: 'Design', isPro: true },
-  { id: 4, name: 'Clean Minimal', img: 'https://images.unsplash.com/photo-1586281380117-5a60ae2050cc?w=400&h=560&fit=crop', category: 'All Roles', isPro: false },
-];
+import { createClient } from '@/utils/supabase/client';
 
 export default function TemplatesPage() {
+  const { user } = useUser();
   const { tier } = useSubscription();
-  const [filter, setFilter] = useState('All');
+  const supabase = createClient();
+  const [templates, setTemplates] = useState<any[]>([]);
+  const [favorites, setFavorites] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState<'all' | 'favorites'>('all');
+  const [categoryFilter, setCategoryFilter] = useState('All');
 
-  const categories = ['All', 'Tech & Engineering', 'Management', 'Design', 'All Roles'];
-  const filtered = filter === 'All' ? TEMPLATES : TEMPLATES.filter(t => t.category === filter);
+  useEffect(() => {
+    const fetchData = async () => {
+      if (user) {
+        const { data: tData } = await supabase.from('career_templates').select('*');
+        const { data: fData } = await supabase.from('user_favorite_templates').select('template_id').eq('user_id', user.id);
+        
+        if (tData) setTemplates(tData);
+        if (fData) setFavorites(fData.map(f => f.template_id));
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, [user, supabase]);
+
+  const toggleFavorite = async (id: string) => {
+    if (!user) return;
+    const isFav = favorites.includes(id);
+    
+    if (isFav) {
+      await supabase.from('user_favorite_templates').delete().eq('user_id', user.id).eq('template_id', id);
+      setFavorites(prev => prev.filter(f => f !== id));
+    } else {
+      await supabase.from('user_favorite_templates').insert({ user_id: user.id, template_id: id });
+      setFavorites(prev => [...prev, id]);
+    }
+  };
 
   const showToast = (type: string, msg: string) => {
     window.dispatchEvent(new CustomEvent('show-toast', { detail: { type, msg } }));
   };
 
-  const handleUseTemplate = (t: AppTemplate) => {
-    if (t.isPro && tier === 'free') {
-      showToast('error', 'This template requires a Pro plan.');
-      return;
+  const handleUseTemplate = (t: any) => {
+    if (t.is_pro && tier === 'free') {
+      showToast('error', 'Pro subscription required for this template.');
+    } else {
+      window.location.href = `/editor?id=${t.id}`;
     }
-    showToast('success', `Applying ${t.name} template...`);
   };
+
+  const categories = ['All', 'Tech & Engineering', 'Management', 'Design', 'Creative'];
+  
+  const baseFiltered = categoryFilter === 'All' 
+    ? templates 
+    : templates.filter(t => t.category === categoryFilter);
+
+  const finalFiltered = filter === 'favorites'
+    ? baseFiltered.filter(t => favorites.includes(t.id))
+    : baseFiltered;
 
   return (
     <div className="afi">
@@ -46,53 +73,78 @@ export default function TemplatesPage() {
       <div className="app-shell">
         <Sidebar />
         <main className="main" style={{ padding: '32px 48px', background: 'var(--surface)' }}>
-          <div className="pg-hdr" style={{ marginBottom: '32px' }}>
-            <h1 style={{ fontSize: '32px', fontWeight: 900, color: 'var(--t1)', marginBottom: '8px' }}>ATS Resume Templates</h1>
-            <p style={{ color: 'var(--t3)', fontWeight: 600 }}>Start with a proven layout optimized for applicant tracking systems.</p>
+          <div className="pg-hdr">
+            <h1 style={{ fontSize: '32px', fontWeight: 900, color: 'var(--t1)' }}>Resume Templates</h1>
+            <p style={{ color: 'var(--t3)', fontWeight: 600 }}>Battle-tested, ATS-optimized designs to get you hired.</p>
           </div>
 
-          {/* Filter Bar */}
-          <div style={{ display: 'flex', gap: '8px', marginBottom: '24px', overflowX: 'auto', paddingBottom: '8px' }}>
-            {categories.map(c => (
-              <button 
-                key={c}
-                className={`sal-filter-btn ${filter === c ? 'active' : ''}`}
-                onClick={() => setFilter(c)}
-                style={{
-                  padding: '8px 16px', borderRadius: '999px', fontSize: '13px', fontWeight: 700,
-                  whiteSpace: 'nowrap', cursor: 'pointer', transition: 'all 150ms',
-                  background: filter === c ? 'var(--t1)' : 'var(--w)',
-                  color: filter === c ? '#fff' : 'var(--t3)',
-                  border: `1px solid ${filter === c ? 'var(--t1)' : 'var(--bd)'}`
-                }}
-              >
-                {c}
-              </button>
-            ))}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px', flexWrap: 'wrap', gap: '16px' }}>
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              {categories.map(c => (
+                <button 
+                  key={c} 
+                  className={`btn btn-sm ${categoryFilter === c ? 'btn-p' : 'btn-s'}`}
+                  onClick={() => setCategoryFilter(c)}
+                >
+                  {c}
+                </button>
+              ))}
+            </div>
+            <button 
+              className={`btn btn-sm ${filter === 'favorites' ? 'btn-p' : 'btn-s'}`} 
+              onClick={() => setFilter(filter === 'all' ? 'favorites' : 'all')}
+            >
+              <span className="mat" style={{ fontSize: '14px', marginRight: '6px' }}>favorite</span> 
+              {filter === 'favorites' ? 'Showing Favorites' : 'My Favorites'}
+            </button>
           </div>
 
-          {/* Template Grid */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '24px' }}>
-            {filtered.map((t, i) => (
-              <div key={t.id} className="card afu" style={{ padding: '16px', animationDelay: `${i * 100}ms` }}>
-                <div style={{ position: 'relative', borderRadius: '12px', overflow: 'hidden', border: '1px solid var(--bd)', marginBottom: '16px', background: 'var(--s1)', aspectRatio: '1/1.4' }}>
-                  <img src={t.img} alt={t.name} style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.9 }} />
-                  {t.isPro && (
-                    <div style={{ position: 'absolute', top: '12px', right: '12px', background: 'var(--t1)', color: '#fff', fontSize: '10px', fontWeight: 900, padding: '4px 8px', borderRadius: '4px', letterSpacing: '.05em' }}>
-                      PRO
+          {loading ? (
+            <div className="template-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '24px' }}>
+              {[1,2,3,4,5,6].map(i => <div key={i} className="sk" style={{ height: '400px', borderRadius: '16px' }}></div>)}
+            </div>
+          ) : (
+            <div className="template-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '24px' }}>
+              {finalFiltered.map((t, idx) => (
+                <div key={t.id} className="card afu" style={{ padding: '16px', animationDelay: `${idx * 100}ms` }}>
+                  <div style={{ position: 'relative', borderRadius: '12px', overflow: 'hidden', border: '1px solid var(--bd)', marginBottom: '16px', background: 'var(--s1)', aspectRatio: '1/1.4' }}>
+                    <img src={t.thumbnail} alt={t.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    
+                    {t.is_pro && (
+                      <div style={{ position: 'absolute', top: '12px', left: '12px', background: 'var(--t1)', color: '#fff', fontSize: '10px', fontWeight: 900, padding: '4px 8px', borderRadius: '4px', letterSpacing: '.05em' }}>
+                        PRO
+                      </div>
+                    )}
+
+                    <button 
+                      className="fav-btn" 
+                      onClick={(e) => { e.stopPropagation(); toggleFavorite(t.id); }}
+                      style={{ position: 'absolute', top: '12px', right: '12px', background: 'var(--w)', width: '32px', height: '32px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none', cursor: 'pointer', boxShadow: 'var(--sh1)' }}
+                    >
+                      <span className="mat" style={{ color: favorites.includes(t.id) ? 'var(--o1)' : 'var(--t4)', fontSize: '20px' }}>
+                        {favorites.includes(t.id) ? 'favorite' : 'favorite_border'}
+                      </span>
+                    </button>
+
+                    <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)', opacity: 0, transition: 'opacity 200ms', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                         onMouseOver={e => e.currentTarget.style.opacity = '1'}
+                         onMouseOut={e => e.currentTarget.style.opacity = '0'}>
+                      <button className="btn btn-p" onClick={() => handleUseTemplate(t)}>Use Template</button>
                     </div>
-                  )}
-                  <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)', opacity: 0, transition: 'opacity 200ms', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                       onMouseOver={e => e.currentTarget.style.opacity = '1'}
-                       onMouseOut={e => e.currentTarget.style.opacity = '0'}>
-                    <button className="btn btn-p" onClick={() => handleUseTemplate(t)}>Use Template</button>
                   </div>
+                  <div style={{ fontSize: '15px', fontWeight: 900, color: 'var(--t1)', marginBottom: '4px' }}>{t.name}</div>
+                  <div style={{ fontSize: '12px', color: 'var(--t3)', fontWeight: 600 }}>{t.category}</div>
                 </div>
-                <div style={{ fontSize: '15px', fontWeight: 900, color: 'var(--t1)', marginBottom: '4px' }}>{t.name}</div>
-                <div style={{ fontSize: '12px', color: 'var(--t3)', fontWeight: 600 }}>{t.category}</div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
+
+          {(!loading && finalFiltered.length === 0) && (
+            <div style={{ textAlign: 'center', padding: '80px 0' }}>
+              <span className="mat" style={{ fontSize: '48px', color: 'var(--s3)', marginBottom: '16px' }}>search_off</span>
+              <p style={{ color: 'var(--t3)', fontWeight: 600 }}>No templates found in this category.</p>
+            </div>
+          )}
         </main>
       </div>
       <MobileBottomNav />

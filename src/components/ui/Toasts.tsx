@@ -22,8 +22,16 @@ export default function Toasts() {
       }, 5000);
     };
 
+    const handleClearToast = () => {
+      setToasts([]);
+    };
+
     window.addEventListener('show-toast', handleShowToast);
-    return () => window.removeEventListener('show-toast', handleShowToast);
+    window.addEventListener('clear-toast', handleClearToast);
+    return () => {
+      window.removeEventListener('show-toast', handleShowToast);
+      window.removeEventListener('clear-toast', handleClearToast);
+    };
   }, []);
 
   const icons = {

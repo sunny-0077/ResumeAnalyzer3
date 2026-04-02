@@ -5,16 +5,44 @@ import Navbar from '@/components/layout/Navbar';
 import Sidebar from '@/components/layout/Sidebar';
 import MobileBottomNav from '@/components/layout/MobileBottomNav';
 import { useUser } from '@/context/AuthContext';
+import { safeReferral } from '@/lib/utils';
+import { createClient } from '@/utils/supabase/client';
+import { useEffect } from 'react';
+import { PRICING } from '@/lib/pricing';
 
 export default function ReferralsPage() {
   const { user } = useUser();
-  const userName =
-    user?.user_metadata?.full_name ||
-    user?.email?.split("@")[0] ||
-    `user-${user?.id?.slice(0,6)}` ||
-    "user";
+  const supabase = createClient();
+  
+  const [referralHistory, setReferralHistory] = useState<any[]>([]);
+  const [totalEarned, setTotalEarned] = useState(0);
 
-  const referralLink = `https://profilepro.ai/r/${userName}`;
+  const getUserName = (user: any) => {
+    return (
+      user?.user_metadata?.full_name ||
+      user?.email?.split("@")[0] ||
+      `user-${user?.id?.slice(0, 6)}` ||
+      "user"
+    );
+  };
+
+  const referralLink = user 
+    ? `https://hirely.ai/r/${encodeURIComponent(getUserName(user))}`
+    : "https://hirely.ai/signup";
+
+  useEffect(() => {
+    const fetchReferrals = async () => {
+      if (user) {
+        const { data } = await supabase.from('referrals').select('*').eq('referrer_id', user.id);
+        if (data) {
+          setReferralHistory(data);
+          setTotalEarned(data.length * 3);
+        }
+      }
+    };
+    fetchReferrals();
+  }, [user, supabase]);
+  const userName = getUserName(user);
 
   const showToast = (type: string, msg: string) => {
     window.dispatchEvent(new CustomEvent('show-toast', { detail: { type, msg } }));
@@ -25,23 +53,17 @@ export default function ReferralsPage() {
     showToast('success', 'Referral link copied to clipboard!');
   };
 
-  const stats = [
-    { val: 3, lbl: 'Total Referrals' },
-    { val: 9, lbl: 'Free Analyses Earned' },
-    { val: 2, lbl: 'Active Trials' },
-    { val: '₹1,497', lbl: 'Value Generated' }
+  const dashboardStats = [
+    { val: referralHistory.length, lbl: 'Total Referrals' },
+    { val: totalEarned, lbl: 'Free Analyses Earned' },
+    { val: 0, lbl: 'Active Trials' },
+    { val: `₹${referralHistory.length * 499}`, lbl: 'Value Generated' }
   ];
 
   const milestones = [
-    { n: 1, reward: '3 free analyses', done: true },
-    { n: 5, reward: '1 month Pro free', done: false },
-    { n: 10, reward: 'Lifetime 20% discount', done: false }
-  ];
-
-  const referrals = [
-    { name: 'Priya Sharma', email: 'priya@gmail.com', date: 'Jan 18, 2026', status: 'Signed up', sc: 'var(--gn)', sg: 'var(--gbg)' },
-    { name: 'Rahul Verma', email: 'rahul@gmail.com', date: 'Jan 22, 2026', status: 'Signed up', sc: 'var(--gn)', sg: 'var(--gbg)' },
-    { name: 'Anita Reddy', email: 'anita@gmail.com', date: 'Jan 25, 2026', status: 'Trial active', sc: 'var(--o2)', sg: 'var(--o6)' },
+    { n: 1, reward: '3 free analyses', done: referralHistory.length >= 1 },
+    { n: 5, reward: '1 month Pro free', done: referralHistory.length >= 5 },
+    { n: 10, reward: 'Lifetime 20% discount', done: referralHistory.length >= 10 }
   ];
 
   return (
@@ -119,19 +141,25 @@ export default function ReferralsPage() {
                   <span className="badge" style={{ background: 'var(--gbg)', color: 'var(--gn)', fontWeight: 800 }}>+9 analyses earned</span>
                 </div>
                 
-                {referrals.map((r, i) => (
-                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '14px', padding: '16px 0', borderBottom: i !== referrals.length - 1 ? '1px solid var(--bd)' : 'none' }}>
-                    <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: 'linear-gradient(135deg, var(--o2), var(--o3))', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '15px', fontWeight: 800, flexShrink: 0 }}>
-                      {r.name[0]}
+                {referralHistory.length > 0 ? (
+                  referralHistory.map((r, i) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '14px', padding: '16px 0', borderBottom: i !== referralHistory.length - 1 ? '1px solid var(--bd)' : 'none' }}>
+                      <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: 'linear-gradient(135deg, var(--o2), var(--o3))', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '15px', fontWeight: 800, flexShrink: 0 }}>
+                        {r.referred_name?.[0] || 'U'}
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: '14px', fontWeight: 800, color: 'var(--t1)' }}>{r.referred_name || 'New User'}</div>
+                        <div style={{ fontSize: '12px', color: 'var(--t3)', fontWeight: 600 }}>{r.referred_email} · Joined {new Date(r.created_at).toLocaleDateString()}</div>
+                      </div>
+                      <span className="badge" style={{ background: 'var(--gbg)', color: 'var(--gn)', fontWeight: 800 }}>Signed up</span>
+                      <span style={{ fontSize: '15px', fontWeight: 900, color: 'var(--gn)', marginLeft: '8px' }}>+3</span>
                     </div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: '14px', fontWeight: 800, color: 'var(--t1)' }}>{r.name}</div>
-                      <div style={{ fontSize: '12px', color: 'var(--t3)', fontWeight: 600 }}>{r.email} · Joined {r.date}</div>
-                    </div>
-                    <span className="badge" style={{ background: r.sg, color: r.sc, fontWeight: 800 }}>{r.status}</span>
-                    <span style={{ fontSize: '15px', fontWeight: 900, color: 'var(--gn)', marginLeft: '8px' }}>+3</span>
+                  ))
+                ) : (
+                  <div style={{ textAlign: 'center', padding: '40px 0', opacity: 0.5, fontSize: '14px', fontWeight: 600 }}>
+                    No friends referred yet. Start sharing to earn rewards!
                   </div>
-                ))}
+                )}
               </div>
             </div>
 
@@ -139,8 +167,8 @@ export default function ReferralsPage() {
             <div className="afu" style={{ animationDelay: '150ms' }}>
               <div className="card" style={{ marginBottom: '20px', padding: '24px' }}>
                 <div style={{ fontSize: '14px', fontWeight: 800, marginBottom: '16px' }}>Your Referral Stats</div>
-                {stats.map((s, i) => (
-                  <div key={i} style={{ padding: '14px 0', borderBottom: i !== stats.length - 1 ? '1px solid var(--bd)' : 'none' }}>
+                {dashboardStats.map((s, i) => (
+                  <div key={i} style={{ padding: '14px 0', borderBottom: i !== dashboardStats.length - 1 ? '1px solid var(--bd)' : 'none' }}>
                     <div style={{ fontSize: '28px', fontWeight: 900, color: 'var(--o2)', letterSpacing: '-.02em' }}>{s.val}</div>
                     <div style={{ fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.07em', color: 'var(--t4)', marginTop: '2px' }}>{s.lbl}</div>
                   </div>

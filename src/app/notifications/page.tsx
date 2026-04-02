@@ -5,6 +5,9 @@ import Navbar from '@/components/layout/Navbar';
 import Sidebar from '@/components/layout/Sidebar';
 import MobileBottomNav from '@/components/layout/MobileBottomNav';
 import { useRouter } from 'next/navigation';
+import { useUser } from '@/context/AuthContext';
+import { createClient } from '@/utils/supabase/client';
+import { useEffect } from 'react';
 
 type Notification = {
   id: number;
@@ -19,26 +22,38 @@ type Notification = {
   type: 'jobs' | 'resume' | 'interview' | 'other';
 };
 
-const INITIAL_NOTIFS: Notification[] = [
-  { id: 1, type: 'resume', icon: 'description', title: 'Analysis Complete', msg: 'Your latest resume analysis for Senior PM is ready. Score: 92%', time: '10 mins ago', page: '/analyzer', read: false, ibg: 'var(--o6)', ic: 'var(--o2)' },
-  { id: 2, type: 'jobs', icon: 'work', title: 'New Job Match', msg: 'Stripe is hiring a Product Director with a 95% skill match.', time: '2 hours ago', page: '/jobmatch', read: false, ibg: 'var(--gbg)', ic: 'var(--gn)' },
-  { id: 3, type: 'interview', icon: 'record_voice_over', title: 'Interview Reminder', msg: 'Your mock interview practice score is available.', time: 'Yesterday', page: '/interview', read: true, ibg: 'var(--bbg)', ic: 'var(--bl)' },
-  { id: 4, type: 'other', icon: 'mail', title: 'Cover Letter Ready', msg: 'AI has drafted your tailored cover letter for Google.', time: '2 days ago', page: '/cover-letter', read: true, ibg: 'var(--pbg)', ic: 'var(--pu)' }
-];
 
 export default function NotificationsPage() {
   const router = useRouter();
-  const [notifs, setNotifs] = useState<Notification[]>(INITIAL_NOTIFS);
+  const { user } = useUser();
+  const supabase = createClient();
+  const [notifs, setNotifs] = useState<Notification[]>([]);
+  const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'unread' | 'jobs' | 'resume' | 'interview'>('all');
+
+  useEffect(() => {
+    const fetchNotifs = async () => {
+      if (user) {
+        const { data } = await supabase.from('notifications').select('*').eq('user_id', user.id).order('created_at', { ascending: false });
+        if (data) setNotifs(data as any);
+        setLoading(false);
+      }
+    };
+    fetchNotifs();
+  }, [user, supabase]);
 
   const unreadCount = notifs.filter(n => !n.read).length;
 
-  const markAllRead = () => {
-    setNotifs(prev => prev.map(n => ({ ...n, read: true })));
-    window.dispatchEvent(new CustomEvent('show-toast', { detail: { type: 'success', msg: 'All caught up!' } }));
+  const markAllRead = async () => {
+    if (user) {
+      await supabase.from('notifications').update({ read: true }).eq('user_id', user.id);
+      setNotifs(prev => prev.map(n => ({ ...n, read: true })));
+      window.dispatchEvent(new CustomEvent('show-toast', { detail: { type: 'success', msg: 'All caught up!' } }));
+    }
   };
 
-  const handleNotifClick = (id: number, page: string) => {
+  const handleNotifClick = async (id: number, page: string) => {
+    await supabase.from('notifications').update({ read: true }).eq('id', id);
     setNotifs(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
     router.push(page);
   };

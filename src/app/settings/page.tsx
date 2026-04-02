@@ -6,12 +6,23 @@ import Sidebar from '@/components/layout/Sidebar';
 import MobileBottomNav from '@/components/layout/MobileBottomNav';
 import { useUser } from '@/context/AuthContext';
 import { useSubscription } from '@/hooks/useSubscription';
+import { createClient } from '@/utils/supabase/client';
+import { PRICING } from '@/lib/pricing';
+import { useEffect } from 'react';
 
 export default function SettingsPage() {
   const { user } = useUser();
   const { tier } = useSubscription();
+  const supabase = createClient();
 
   const [activeTab, setActiveTab] = useState('profile');
+  const [profileData, setProfileData] = useState({
+    firstName: '',
+    lastName: '',
+    email: '',
+    location: '',
+    bio: ''
+  });
 
   // Toggle states
   const [toggles, setToggles] = useState<Record<string, boolean>>({
@@ -29,8 +40,42 @@ export default function SettingsPage() {
     privSalary: true,
   });
 
-  const toggle = (key: string) => {
-    setToggles(prev => ({ ...prev, [key]: !prev[key] }));
+  useEffect(() => {
+    const fetchSettings = async () => {
+      if (user) {
+        const { data: profile } = await supabase.from('profiles').select('*').eq('id', user.id).single();
+        if (profile) {
+          setProfileData({
+            firstName: profile.full_name?.split(' ')[0] || '',
+            lastName: profile.full_name?.split(' ').slice(1).join(' ') || '',
+            email: user.email || '',
+            location: profile.location || '',
+            bio: profile.bio || ''
+          });
+          if (profile.settings) setToggles(profile.settings);
+        }
+      }
+    };
+    fetchSettings();
+  }, [user, supabase]);
+
+  const saveProfile = async () => {
+    if (user) {
+      await supabase.from('profiles').update({
+        full_name: `${profileData.firstName} ${profileData.lastName}`,
+        location: profileData.location,
+        bio: profileData.bio
+      }).eq('id', user.id);
+      showToast('success', 'Profile and preferences synced to cloud!');
+    }
+  };
+
+  const toggle = async (key: string) => {
+    const newToggles = { ...toggles, [key]: !toggles[key] };
+    setToggles(newToggles);
+    if (user) {
+      await supabase.from('profiles').update({ settings: newToggles }).eq('id', user.id);
+    }
   };
 
   const showToast = (type: string, msg: string) => {
@@ -80,30 +125,26 @@ export default function SettingsPage() {
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                     <div className="inp-w">
                       <label className="inp-lbl">First Name</label>
-                      <input className="inp" type="text" defaultValue={(user?.user_metadata?.full_name || 'Charan').split(' ')[0]} />
+                      <input className="inp" type="text" value={profileData.firstName} onChange={e => setProfileData({...profileData, firstName: e.target.value})} />
                     </div>
                     <div className="inp-w">
                       <label className="inp-lbl">Last Name</label>
-                      <input className="inp" type="text" defaultValue={(user?.user_metadata?.full_name || 'Kumar').split(' ').slice(1).join(' ') || 'Kumar'} />
+                      <input className="inp" type="text" value={profileData.lastName} onChange={e => setProfileData({...profileData, lastName: e.target.value})} />
                     </div>
                   </div>
                   <div className="inp-w">
                     <label className="inp-lbl">Email Address</label>
-                    <input className="inp" type="email" defaultValue={user?.email || 'charan@gmail.com'} />
-                  </div>
-                  <div className="inp-w">
-                    <label className="inp-lbl">Phone Number</label>
-                    <input className="inp" type="tel" placeholder="+91 9876543210" />
+                    <input className="inp" type="email" value={profileData.email} readOnly style={{ opacity: 0.6 }} />
                   </div>
                   <div className="inp-w">
                     <label className="inp-lbl">Location</label>
-                    <input className="inp" type="text" defaultValue="Bangalore, India" />
+                    <input className="inp" type="text" value={profileData.location} onChange={e => setProfileData({...profileData, location: e.target.value})} />
                   </div>
                   <div className="inp-w">
                     <label className="inp-lbl">Professional Bio</label>
-                    <textarea className="inp" style={{ minHeight: '80px' }} defaultValue="Strategic designer focused on building scalable design systems and high-conversion user interfaces."></textarea>
+                    <textarea className="inp" style={{ minHeight: '80px' }} value={profileData.bio} onChange={e => setProfileData({...profileData, bio: e.target.value})}></textarea>
                   </div>
-                  <button className="btn btn-p btn-sm" onClick={() => showToast('success', 'Profile saved successfully!')} style={{ marginTop: '16px' }}>
+                  <button className="btn btn-p btn-sm" onClick={saveProfile} style={{ marginTop: '16px' }}>
                     <span className="mat" style={{ fontSize: '16px', marginRight: '6px' }}>save</span> Save Changes
                   </button>
                 </div>
@@ -165,6 +206,12 @@ export default function SettingsPage() {
                   
                   <div style={{ background: 'var(--o6)', border: '1.5px solid var(--o5)', borderRadius: '16px', padding: '24px', marginBottom: '24px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div className="dash-card-h">
+                        <span style={{ fontSize: '12px', fontWeight: 900, textTransform: 'uppercase', color: 'var(--t4)' }}>Monthly Billing</span>
+                      </div>
+                      <div style={{ fontSize: '14px', fontWeight: 900, color: 'var(--gn)' }}>{tier === 'advanced' ? `₹${PRICING.IN.advanced}` : `₹${PRICING.IN.pro}`}</div>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <div>
                         <div style={{ fontSize: '11px', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--o3)', marginBottom: '6px' }}>CURRENT PLAN</div>
                         <div style={{ fontSize: '24px', fontWeight: 900, color: 'var(--t1)' }}>{tier === 'pro' ? 'Pro ✦' : tier === 'advanced' ? 'Advanced' : 'Free'}</div>
@@ -192,7 +239,7 @@ export default function SettingsPage() {
                   {['Jan 2026', 'Dec 2025', 'Nov 2025'].map(m => (
                     <div key={m} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px', border: '1px solid var(--bd)', borderRadius: '12px', marginBottom: '8px' }}>
                       <div style={{ fontSize: '14px', fontWeight: 700 }}>{m}</div>
-                      <div style={{ fontSize: '14px', fontWeight: 900, color: 'var(--gn)' }}>₹499</div>
+                      <div style={{ fontSize: '14px', fontWeight: 900, color: 'var(--gn)' }}>₹{PRICING.IN.pro}</div>
                       <button className="btn btn-s btn-sm" style={{ fontSize: '12px', border: 'none' }} onClick={() => showToast('info', 'Downloading invoice...')}>
                         <span className="mat" style={{ fontSize: '16px', marginRight: '4px' }}>download</span> Invoice
                       </button>

@@ -3,16 +3,39 @@
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useUser } from '@/context/AuthContext';
+import { createClient } from '@/utils/supabase/client';
 
 export default function OnboardingPage() {
   const router = useRouter();
   const { user } = useUser();
+  const supabase = createClient();
   const [step, setStep] = useState(1);
-  const totalSteps = 8;
+  const totalSteps = 4; // Simplified to 4 key steps for high-conversion
 
-  const nextStep = () => {
-    if (step < totalSteps) setStep(step + 1);
-    else router.push('/dashboard');
+  const [formData, setFormData] = useState({
+    name: user?.user_metadata?.full_name || '',
+    level: '',
+    title: '',
+    experience: 0
+  });
+
+  const nextStep = async () => {
+    if (step < totalSteps) {
+      setStep(step + 1);
+    } else {
+      if (user) {
+        await supabase.from('profiles').update({
+          professional_title: formData.title,
+          experience_years: formData.experience,
+          onboarded: true
+        }).eq('id', user.id);
+      }
+      router.push('/dashboard');
+    }
+  };
+
+  const updateProfileData = (field: string, val: any) => {
+    setFormData({ ...formData, [field]: val });
   };
 
   const prevStep = () => {
@@ -61,7 +84,13 @@ export default function OnboardingPage() {
             )}
             <div className="inp-wrap">
               <label className="inp-label">What should we call you?</label>
-              <input className="inp" type="text" placeholder="Preferred first name" defaultValue={user?.user_metadata?.full_name?.split(' ')[0] || ''} />
+              <input 
+                className="inp" 
+                type="text" 
+                placeholder="Preferred first name" 
+                value={formData.name} 
+                onChange={(e) => updateProfileData('name', e.target.value)}
+              />
             </div>
             <div className="ob-actions">
               <span></span>
@@ -77,8 +106,25 @@ export default function OnboardingPage() {
             <div className="ob-title">Where are you in your career?</div>
             <div className="ob-sub">This personalises job matches and interview questions to your level of experience.</div>
             <div className="ob-chips">
-              {['College Student', 'Recent Graduate', 'Early Career (1-3 yrs)', 'Professional (4-8 yrs)', 'Senior Leader (9+ yrs)', 'Career Changer'].map(s => (
-                <button key={s} className="ob-chip" onClick={nextStep}>{s}</button>
+              {[
+                { label: 'College Student', exp: 0 },
+                { label: 'Recent Graduate', exp: 1 },
+                { label: 'Early Career (1-3 yrs)', exp: 2 },
+                { label: 'Professional (4-8 yrs)', exp: 6 },
+                { label: 'Senior Leader (9+ yrs)', exp: 12 },
+                { label: 'Career Changer', exp: 3 }
+              ].map(s => (
+                <button 
+                  key={s.label} 
+                  className={`ob-chip ${formData.level === s.label ? 'active' : ''}`}
+                  onClick={() => {
+                    updateProfileData('level', s.label);
+                    updateProfileData('experience', s.exp);
+                    nextStep();
+                  }}
+                >
+                  {s.label}
+                </button>
               ))}
             </div>
             <div className="ob-actions">
@@ -96,7 +142,13 @@ export default function OnboardingPage() {
             <div className="ob-sub">Tell us the specific job title you're aiming for next.</div>
             <div className="inp-wrap">
               <label className="inp-label">Target Job Title</label>
-              <input className="inp" type="text" placeholder="e.g. Senior Product Designer, Backend Engineer" />
+              <input 
+                className="inp" 
+                type="text" 
+                placeholder="e.g. Senior Product Designer, Backend Engineer" 
+                value={formData.title}
+                onChange={(e) => updateProfileData('title', e.target.value)}
+              />
             </div>
             <div className="ob-actions">
               <button className="ob-back" onClick={prevStep}>Back</button>
@@ -127,9 +179,9 @@ export default function OnboardingPage() {
           </div>
         )}
 
-        {step === 8 && (
+        {step === 4 && (
           <div className="ob-sc active" style={{ textAlign: 'center' }}>
-            <div className="ob-ey">Step 8 of 8 — Ready!</div>
+            <div className="ob-ey">Final Step — All Set!</div>
             <div className="ob-title">Account Prepared! 🚀</div>
             <div className="ob-sub">Your career engine is now calibrated. Redirecting you to your personal dashboard...</div>
             <div className="loading-spinner" style={{ marginTop: '30px' }}></div>

@@ -5,6 +5,9 @@ import Navbar from '@/components/layout/Navbar';
 import Sidebar from '@/components/layout/Sidebar';
 import MobileBottomNav from '@/components/layout/MobileBottomNav';
 import { useSubscription } from '@/hooks/useSubscription';
+import { useUser } from '@/context/AuthContext';
+import { createClient } from '@/utils/supabase/client';
+import { useEffect } from 'react';
 
 type Alert = {
   id: number;
@@ -15,27 +18,43 @@ type Alert = {
   active: boolean;
 };
 
-const INITIAL_ALERTS: Alert[] = [
-  { id: 1, role: 'Senior Product Manager', loc: 'Bangalore, Hybrid', auto: true, matches: 12, active: true },
-  { id: 2, role: 'Product Director', loc: 'Remote (India)', auto: false, matches: 3, active: true },
-  { id: 3, role: 'Group PM', loc: 'San Francisco, CA', auto: false, matches: 0, active: false }
-];
-
 export default function JobAlertsPage() {
+  const { user } = useUser();
   const { tier } = useSubscription();
-  const [alerts, setAlerts] = useState<Alert[]>(INITIAL_ALERTS);
+  const supabase = createClient();
+  const [alerts, setAlerts] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchAlerts = async () => {
+      if (user) {
+        const { data } = await supabase.from('user_alerts').select('*').eq('user_id', user.id);
+        if (data) setAlerts(data);
+        setLoading(false);
+      }
+    };
+    fetchAlerts();
+  }, [user, supabase]);
 
   const showToast = (type: string, msg: string) => {
     window.dispatchEvent(new CustomEvent('show-toast', { detail: { type, msg } }));
   };
 
-  const toggleAlert = (id: number, field: 'auto' | 'active') => {
-    if (tier === 'free' && field === 'auto') {
+  const toggleAlert = async (id: string, field: 'auto_apply' | 'active') => {
+    if (tier === 'free' && field === 'auto_apply') {
       showToast('info', 'Auto-Apply requires a Pro plan.');
       return;
     }
-    setAlerts(prev => prev.map(a => a.id === id ? { ...a, [field]: !a[field] } : a));
-    showToast('success', `${field === 'auto' ? 'Auto-Apply' : 'Alert'} setting updated.`);
+    
+    const alert = alerts.find(a => a.id === id);
+    const newVal = !alert[field];
+    
+    const { error } = await supabase.from('user_alerts').update({ [field]: newVal }).eq('id', id);
+    
+    if (!error) {
+      setAlerts(prev => prev.map(a => a.id === id ? { ...a, [field]: newVal } : a));
+      showToast('success', `${field === 'auto_apply' ? 'Auto-Apply' : 'Alert'} setting updated.`);
+    }
   };
 
   return (
@@ -87,7 +106,7 @@ export default function JobAlertsPage() {
                       <div style={{ height: '32px', width: '1px', background: 'var(--bd)' }}></div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                         <div style={{ fontSize: '13px', fontWeight: 800, color: 'var(--t2)' }}>Auto-Apply <span className="mat" style={{ fontSize: '14px', color: 'var(--o2)', verticalAlign: 'middle' }}>auto_awesome</span></div>
-                        <div className={`toggle-sw ${a.auto ? 'on' : ''}`} onClick={() => toggleAlert(a.id, 'auto')}>
+                        <div className={`toggle-sw ${a.auto_apply ? 'on' : ''}`} onClick={() => toggleAlert(a.id, 'auto_apply')}>
                           <div className="toggle-thumb"></div>
                         </div>
                       </div>

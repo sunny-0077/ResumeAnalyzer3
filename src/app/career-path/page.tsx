@@ -5,29 +5,60 @@ import Navbar from '@/components/layout/Navbar';
 import Sidebar from '@/components/layout/Sidebar';
 import MobileBottomNav from '@/components/layout/MobileBottomNav';
 import { useUser } from '@/context/AuthContext';
+import { useSubscription } from '@/hooks/useSubscription';
+import LockedFeature from '@/components/ui/LockedFeature';
+import { useLoading } from '@/hooks/useAppHooks';
+import { requireProAccess } from '@/lib/utils';
+import { createClient } from '@/utils/supabase/client';
+import { useEffect } from 'react';
 
 export default function CareerPathPredictor() {
   const { user } = useUser();
+  const { tier } = useSubscription();
+  const supabase = createClient();
+  const { loading: isRecalculating, setLoading: setIsRecalculating } = useLoading();
+  
   const [currentRole, setCurrentRole] = useState('Senior Product Manager');
   const [targetRole, setTargetRole] = useState('Product Director');
+  const [timeline, setTimeline] = useState(INITIAL_TIMELINE);
+  const [skillGaps, setSkillGaps] = useState(INITIAL_SKILL_GAPS);
+
+  useEffect(() => {
+    const fetchPath = async () => {
+      if (user) {
+        // Pull target role from profile to sync
+        const { data: profile } = await supabase.from('profiles').select('professional_title, target_title').eq('id', user.id).single();
+        if (profile) {
+          if (profile.professional_title) setCurrentRole(profile.professional_title);
+          if (profile.target_title) setTargetRole(profile.target_title);
+        }
+
+        // Pull last saved path
+        const { data: pathData } = await supabase.from('user_career_paths').select('*').eq('user_id', user.id).order('created_at', { ascending: false }).limit(1).single();
+        if (pathData) {
+          setTimeline(pathData.timeline_json);
+          setSkillGaps(pathData.skills_json);
+        }
+      }
+    };
+    fetchPath();
+  }, [user, supabase]);
+
+  const savePath = async (newTimeline: any, newSkills: any) => {
+    if (user) {
+      await supabase.from('user_career_paths').insert({
+        user_id: user.id,
+        current_role: currentRole,
+        target_role: targetRole,
+        timeline_json: newTimeline,
+        skills_json: newSkills
+      });
+    }
+  };
 
   const showToast = (type: string, msg: string) => {
     window.dispatchEvent(new CustomEvent('show-toast', { detail: { type, msg } }));
   };
-
-  const timeline = [
-    { time: 'Current: 2022 – Present', title: 'Senior Product Manager', org: 'Google · Leading primary search UX experiments and core ranking features.', salary: null, skills: [], curr: true, goal: false },
-    { time: 'Goal #1 · Estimated 2026', title: 'Principal Product Manager', org: 'Meta / Stripe · Focus on strategy, high-level roadmapping, and mentorship.', salary: '₹65L – ₹80L', skills: ['System Design', 'Strategic Planning', 'Leadership'], curr: false, goal: false },
-    { time: 'Goal #2 · Estimated 2028', title: 'Product Director', org: 'Global Tech · Executive leadership, P&L responsibility, and organizational scale.', salary: '₹1.1Cr+', skills: ['Product Org Scale', 'Financial Analysis', 'Executive Comm'], curr: false, goal: false },
-    { time: 'North Star · Estimated 2031', title: 'VP of Product / CPO', org: 'Unicorn SaaS · C-Suite leadership at a multi-billion dollar scale.', salary: 'Equity Focus', skills: ['Public Markets', 'Investor Relations', 'Visionary Leadership'], curr: false, goal: true },
-  ];
-
-  const skillGaps = [
-    { skill: 'System Design', pct: 35, color: 'var(--rd)' },
-    { skill: 'P&L Management', pct: 50, color: 'var(--am)' },
-    { skill: 'Executive Communication', pct: 65, color: 'var(--o3)' },
-    { skill: 'Org Scaling', pct: 70, color: 'var(--bl)' },
-  ];
 
   return (
     <div className="afi">
@@ -64,8 +95,22 @@ export default function CareerPathPredictor() {
                     <input className="inp" type="text" value={targetRole} onChange={e => setTargetRole(e.target.value)} style={{ background: 'var(--w)' }} />
                   </div>
                   <div className="inp-w" style={{ marginBottom: 0, gridColumn: '1/-1' }}>
-                    <button className="btn btn-p btn-sm" style={{ width: '100%' }} onClick={() => showToast('success', 'Career path recalculated!')}>
-                      <span className="mat" style={{ marginRight: '6px' }}>trending_up</span> Recalculate Path
+                    <button className="btn btn-p btn-sm" style={{ width: '100%' }} onClick={() => {
+                        setIsRecalculating(true);
+                        setTimeout(async () => {
+                           // Simulated path update based on input
+                           const updatedTimeline = [...timeline];
+                           updatedTimeline[0].title = currentRole;
+                           updatedTimeline[updatedTimeline.length-1].title = targetRole;
+                           setTimeline(updatedTimeline);
+                           await savePath(updatedTimeline, skillGaps);
+                           
+                           showToast('success', 'Career path recalculated and saved!');
+                           setIsRecalculating(false);
+                        }, 1200);
+                    }} disabled={isRecalculating}>
+                      <span className="mat" style={{ marginRight: '6px' }}>{isRecalculating ? 'sync' : 'trending_up'}</span> 
+                      {isRecalculating ? 'AI Mapping...' : 'Recalculate Path'}
                     </button>
                   </div>
                 </div>
@@ -110,6 +155,15 @@ export default function CareerPathPredictor() {
                       </div>
                     </div>
                   ))}
+                  <LockedFeature requiredTier="pro" message="Upgrade to Pro to generate your Strategic Career Roadmap.">
+                    <button 
+                      className="btn btn-p" 
+                      onClick={() => {}} 
+                      disabled={isRecalculating}
+                    >
+                      {isRecalculating ? 'Analyzing Market...' : 'Generate Strategic Roadmap →'}
+                    </button>
+                  </LockedFeature>
                 </div>
               </div>
             </div>
@@ -207,3 +261,22 @@ export default function CareerPathPredictor() {
     </div>
   );
 }
+const INITIAL_TIMELINE = [
+  { time: 'Current: 2022 – Present', title: 'Senior Product Manager', org: 'Google · Leading primary search UX experiments and core ranking features.', salary: null, skills: [], curr: true, goal: false },
+  { time: 'Goal #1 · Estimated 2026', title: 'Principal Product Manager', org: 'Meta / Stripe · Focus on strategy, high-level roadmapping, and mentorship.', salary: '₹65L – ₹80L', skills: ['System Design', 'Strategic Planning', 'Leadership'], curr: false, goal: false },
+  { time: 'Goal #2 · Estimated 2028', title: 'Product Director', org: 'Global Tech · Executive leadership, P&L responsibility, and organizational scale.', salary: '₹1.1Cr+', skills: ['Product Org Scale', 'Financial Analysis', 'Executive Comm'], curr: false, goal: false },
+  { time: 'North Star · Estimated 2031', title: 'VP of Product / CPO', org: 'Unicorn SaaS · C-Suite leadership at a multi-billion dollar scale.', salary: 'Equity Focus', skills: ['Public Markets', 'Investor Relations', 'Visionary Leadership'], curr: false, goal: true },
+];
+
+const INITIAL_SKILL_GAPS = [
+  { skill: 'System Design', pct: 35, color: 'var(--rd)' },
+  { skill: 'P&L Management', pct: 50, color: 'var(--am)' },
+  { skill: 'Executive Communication', pct: 65, color: 'var(--o3)' },
+  { skill: 'Org Scaling', pct: 70, color: 'var(--bl)' },
+];
+
+const showToast = (type: string, msg: string) => {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('show-toast', { detail: { type, msg } }));
+  }
+};

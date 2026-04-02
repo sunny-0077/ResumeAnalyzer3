@@ -21,11 +21,30 @@ export async function POST(req: Request) {
       .update(body.toString())
       .digest("hex");
 
+    const razorpay = new Razorpay({
+      key_id: process.env.NEXT_PUBLIC_RAZORPAY_KEY || '',
+      key_secret: process.env.RAZORPAY_KEY_SECRET || '',
+    });
+
     const isAuthentic = expectedSignature === razorpay_signature;
 
     if (isAuthentic) {
-      // Here you would typically update the user's subscription in the database (Supabase)
-      return NextResponse.json({ message: "Payment verified successfully" }, { status: 200 });
+      // 1. Fetch order details from Razorpay to get the 'tier' from notes — highly secure
+      const order = await razorpay.orders.fetch(razorpay_order_id);
+      const tier = order.notes?.tier || 'pro'; // Default to pro if missing
+
+      // 2. Update the user's profile in Supabase
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({ subscription_tier: tier })
+        .eq('id', user.id);
+
+      if (updateError) {
+        console.error('Profile Update Error:', updateError);
+        return NextResponse.json({ message: "Payment verified, but profile update failed." }, { status: 500 });
+      }
+
+      return NextResponse.json({ message: "Payment verified and tier activated successfully!" }, { status: 200 });
     } else {
       return NextResponse.json({ message: "Signature mismatch" }, { status: 400 });
     }

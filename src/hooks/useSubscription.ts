@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { createClient } from '@/utils/supabase/client';
 
 export type UserTier = 'free' | 'pro' | 'advanced';
 
@@ -9,15 +10,42 @@ export function useSubscription() {
   const [isTrialing, setIsTrialing] = useState(false);
   const [trialTimeLeft, setTrialTimeLeft] = useState(3 * 24 * 60 * 60); // 3 days in seconds
 
-  useEffect(() => {
-    // Simulated load from local storage
-    const saved = localStorage.getItem('user_tier') as UserTier;
-    if (saved) setTier(saved);
-  }, []);
+  const supabase = createClient();
 
-  const upgrade = (newTier: UserTier, isTrial = false) => {
+  useEffect(() => {
+    const fetchTier = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('subscription_tier')
+          .eq('id', user.id)
+          .single();
+        
+        if (data?.subscription_tier) {
+          setTier(data.subscription_tier as UserTier);
+        } else {
+          // Fallback to local if DB is empty for now
+          const saved = localStorage.getItem('user_tier') as UserTier;
+          if (saved) setTier(saved);
+        }
+      }
+    };
+    fetchTier();
+  }, [supabase]);
+
+  const upgrade = async (newTier: UserTier, isTrial = false) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      await supabase
+        .from('profiles')
+        .update({ subscription_tier: newTier })
+        .eq('id', user.id);
+    }
+    
     setTier(newTier);
     localStorage.setItem('user_tier', newTier);
+    
     if (isTrial) {
       setIsTrialing(true);
       window.dispatchEvent(new CustomEvent('show-toast', { detail: { type: 'success', msg: `3-day Advanced trial started! Enjoy full access.` } }));

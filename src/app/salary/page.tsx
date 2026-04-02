@@ -5,22 +5,43 @@ import Navbar from '@/components/layout/Navbar';
 import Sidebar from '@/components/layout/Sidebar';
 import MobileBottomNav from '@/components/layout/MobileBottomNav';
 import { useSubscription } from '@/hooks/useSubscription';
+import { useLoading } from '@/hooks/useAppHooks';
+import { requireProAccess } from '@/lib/utils';
+import { useUser } from '@/context/AuthContext';
+import { createClient } from '@/utils/supabase/client';
+import { useEffect } from 'react';
 
 export default function SalaryIntel() {
   const [city, setCity] = useState('all');
   const [level, setLevel] = useState('all');
   const { tier } = useSubscription();
+  const { user } = useUser();
+  const supabase = createClient();
+  const { loading: isGenerating, setLoading: setIsGenerating } = useLoading();
+  const [salaries, setSalaries] = useState(INITIAL_SALARY_DATA);
+  const [savedScripts, setSavedScripts] = useState<any[]>([]);
+  const [cooldown, setCooldown] = useState(false);
 
-  const salaryData = [
-    { role: 'Frontend Engineer', city: 'Bangalore', level: 'Mid Level', range: '₹14L – ₹28L', median: '₹19L', trend: '↑ 12%', fill: 72, demand: 'HIGH DEMAND', icon: 'local_fire_department', skills: ['React', 'TypeScript', 'Next.js'] },
-    { role: 'Backend Engineer', city: 'Bangalore', level: 'Senior', range: '₹22L – ₹48L', median: '₹32L', trend: '↑ 18%', fill: 85, demand: 'HIGH DEMAND', icon: 'local_fire_department', skills: ['Node.js', 'Go', 'PostgreSQL'] },
-    { role: 'Product Manager', city: 'Mumbai', level: 'Mid Level', range: '₹18L – ₹38L', median: '₹26L', trend: '↑ 22%', fill: 78, demand: 'TRENDING', icon: 'trending_up', skills: ['Roadmapping', 'SQL', 'Figma'] },
-    { role: 'Data Engineer', city: 'Hyderabad', level: 'Mid-Senior', range: '₹16L – ₹40L', median: '₹24L', trend: '↑ 25%', fill: 80, demand: 'HIGH DEMAND', icon: 'local_fire_department', skills: ['Spark', 'Airflow', 'dbt'] },
-    { role: 'UI/UX Designer', city: 'Pune', level: 'Junior-Mid', range: '₹8L – ₹22L', median: '₹14L', trend: '→ 5%', fill: 55, demand: 'STABLE', icon: 'equalizer', skills: ['Figma', 'Prototyping', 'Research'] },
-  ];
+  useEffect(() => {
+    const fetchMarketData = async () => {
+      if (user) {
+        // Fetch real market benchmarks if available, else use INITIAL_SALARY_DATA
+        const { data } = await supabase.from('market_salaries').select('*');
+        if (data && data.length > 0) setSalaries(data);
+
+        // Fetch user's saved negotiation scripts
+        const { data: scripts } = await supabase.from('user_scripts').select('*').eq('user_id', user.id);
+        if (scripts) setSavedScripts(scripts);
+      }
+    };
+    fetchMarketData();
+  }, [user, supabase]);
+
+  const [inputSalary, setInputSalary] = useState('');
+  const [inputAchievement, setInputAchievement] = useState('');
 
   const handleRoleClick = () => {
-    if (tier !== 'advanced') {
+    if (!requireProAccess(tier)) {
       window.dispatchEvent(new CustomEvent('open-upgrade'));
     }
   };
@@ -67,7 +88,7 @@ export default function SalaryIntel() {
           </div>
 
           <div className="salary-grid" style={{ marginTop: '40px' }}>
-            {salaryData.map((s, i) => (
+            {salaries.map((s, i) => (
               <div key={i} className="sal-card afu" style={{ animationDelay: `${i * 100}ms` }} onClick={handleRoleClick}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                   <div className="sal-role">{s.role}</div>
@@ -107,15 +128,34 @@ export default function SalaryIntel() {
                 <div>
                    <div className="ab-inp-w" style={{ marginBottom: '20px' }}>
                       <label className="ab-inp-l">Target Salary (₹ Annual)</label>
-                      <input className="ab-input" placeholder="e.g. ₹35,00,000" />
+                      <input className="ab-input" placeholder="e.g. ₹35,00,000" value={inputSalary} onChange={(e) => setInputSalary(e.target.value)} />
                    </div>
                    <div className="ab-inp-w" style={{ marginBottom: '20px' }}>
                       <label className="ab-inp-l">Primary Achievement</label>
-                      <textarea className="ab-area" placeholder="e.g. Led a team of 5 to increase revenue by 20%..." style={{ minHeight: '100px' }} />
+                      <textarea className="ab-area" placeholder="e.g. Led a team of 5 to increase revenue by 20%..." style={{ minHeight: '100px' }} value={inputAchievement} onChange={(e) => setInputAchievement(e.target.value)} />
                    </div>
-                   <button className="btn btn-p" style={{ width: '100%', padding: '14px' }} onClick={() => window.dispatchEvent(new CustomEvent('show-toast', { detail: { type: 'success', msg: 'Negotiation Script Generated!' } }))}>
-                      Generate Persuasive Script
-                   </button>
+                    <button className="btn btn-p" style={{ width: '100%', padding: '14px' }} 
+                      onClick={async () => {
+                        if (cooldown) return;
+                        setIsGenerating(true);
+                        setCooldown(true);
+                        setTimeout(async () => {
+                          const script = `Hi [Hiring Manager], thank you for the offer. Based on my research on current market trends for [Role] in [City] and my recent success in ${inputAchievement}, I was expecting a compensation package closer to ${inputSalary}...`;
+                          if (user) {
+                            await supabase.from('user_scripts').insert({
+                              user_id: user.id,
+                              target_salary: inputSalary,
+                              achievement: inputAchievement,
+                              script_content: script
+                            });
+                          }
+                          window.dispatchEvent(new CustomEvent('show-toast', { detail: { type: 'success', msg: 'Negotiation Script Generated & Saved!' } }));
+                          setIsGenerating(false);
+                          setTimeout(() => setCooldown(false), 1500);
+                        }, 1200);
+                      }} disabled={isGenerating || cooldown}>
+                      {isGenerating ? 'Analyzing Market...' : 'Generate Persuasive Script'}
+                    </button>
                 </div>
                 <div style={{ background: 'var(--o7)', borderRadius: '20px', border: '1.5px dashed var(--o5)', padding: '24px', display: 'flex', flexDirection: 'column' }}>
                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
@@ -123,7 +163,9 @@ export default function SalaryIntel() {
                       <span className="mat" style={{ fontSize: '18px', color: 'var(--o4)', cursor: 'pointer' }}>content_copy</span>
                    </div>
                    <div style={{ flex: 1, fontSize: '13px', color: 'var(--t2)', fontStyle: 'italic', lineHeight: 1.6 }}>
-                      "Hi [Hiring Manager], thank you for the offer. Based on my research on current market trends for [Role] in [City] and my recent success in [Achievement], I was expecting a compensation package closer to..."
+                      {savedScripts.length > 0 
+                        ? savedScripts[0].script_content 
+                        : `"Hi [Hiring Manager], based on my recent success in ${inputAchievement || '[Achievement]'}, I was expecting..."`}
                    </div>
                    <div style={{ marginTop: '16px', background: 'var(--w)', padding: '12px', borderRadius: '12px', border: '1px solid var(--o5)', display: 'flex', gap: '8px' }}>
                       <span className="mat" style={{ color: 'var(--o3)', fontSize: '16px' }}>verified</span>
@@ -144,6 +186,13 @@ export default function SalaryIntel() {
     </div>
   );
 }
+const INITIAL_SALARY_DATA = [
+  { role: 'Frontend Engineer', city: 'Bangalore', level: 'Mid Level', range: '₹14L – ₹28L', median: '₹19L', trend: '↑ 12%', fill: 72, demand: 'HIGH DEMAND', icon: 'local_fire_department', skills: ['React', 'TypeScript', 'Next.js'] },
+  { role: 'Backend Engineer', city: 'Bangalore', level: 'Senior', range: '₹22L – ₹48L', median: '₹32L', trend: '↑ 18%', fill: 85, demand: 'HIGH DEMAND', icon: 'local_fire_department', skills: ['Node.js', 'Go', 'PostgreSQL'] },
+  { role: 'Product Manager', city: 'Mumbai', level: 'Mid Level', range: '₹18L – ₹38L', median: '₹26L', trend: '↑ 22%', fill: 78, demand: 'TRENDING', icon: 'trending_up', skills: ['Roadmapping', 'SQL', 'Figma'] },
+  { role: 'Data Engineer', city: 'Hyderabad', level: 'Mid-Senior', range: '₹16L – ₹40L', median: '₹24L', trend: '↑ 25%', fill: 80, demand: 'HIGH DEMAND', icon: 'local_fire_department', skills: ['Spark', 'Airflow', 'dbt'] },
+  { role: 'UI/UX Designer', city: 'Pune', level: 'Junior-Mid', range: '₹8L – ₹22L', median: '₹14L', trend: '→ 5%', fill: 55, demand: 'STABLE', icon: 'equalizer', skills: ['Figma', 'Prototyping', 'Research'] },
+];
 
 const cities = [
   { id: 'all', label: 'All Cities' },

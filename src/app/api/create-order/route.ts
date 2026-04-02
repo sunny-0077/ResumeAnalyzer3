@@ -1,11 +1,7 @@
 import { NextResponse } from 'next/server';
 import Razorpay from 'razorpay';
 import { createClient } from '@/utils/supabase/server';
-
-const razorpay = new Razorpay({
-  key_id: process.env.NEXT_PUBLIC_RAZORPAY_KEY || '',
-  key_secret: process.env.RAZORPAY_KEY_SECRET || '',
-});
+import { getRegionData } from '@/lib/pricing';
 
 export async function POST(req: Request) {
   try {
@@ -17,19 +13,32 @@ export async function POST(req: Request) {
     }
 
     const { tier } = await req.json();
+    const country = req.headers.get('x-vercel-ip-country') || 'IN';
+    const region = getRegionData(country);
 
     let amount = 0;
-    if (tier === 'pro') amount = 499 * 100; // in paisa
-    if (tier === 'advanced') amount = 899 * 100;
+    
+    // Use Central Pricing Engine
+    if (tier === 'pro') amount = region.pro * 100;
+    if (tier === 'advanced') amount = region.advanced * 100;
 
     if (amount === 0) {
       return NextResponse.json({ error: 'Invalid tier' }, { status: 400 });
     }
 
+    // Lazy initialization of Razorpay to prevent build-time failures
+    const razorpay = new Razorpay({
+      key_id: process.env.NEXT_PUBLIC_RAZORPAY_KEY || '',
+      key_secret: process.env.RAZORPAY_KEY_SECRET || '',
+    });
+
     const options = {
       amount,
-      currency: 'INR',
+      currency: region.currency,
       receipt: `receipt_${Date.now()}`,
+      notes: {
+        tier: tier
+      }
     };
 
     const order = await razorpay.orders.create(options);

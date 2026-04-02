@@ -1,26 +1,117 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Navbar from '@/components/layout/Navbar';
 import Sidebar from '@/components/layout/Sidebar';
 import MobileBottomNav from '@/components/layout/MobileBottomNav';
 import { useUser } from '@/context/AuthContext';
 import { useSubscription } from '@/hooks/useSubscription';
+import { createClient } from '@/utils/supabase/client';
 
 export default function ProfilePage() {
-  const { user } = useUser();
+  const { user, profile: userProfile, refreshProfile } = useUser();
   const { tier } = useSubscription();
+  const supabase = createClient();
+  const [loading, setLoading] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   const [profile, setProfile] = useState({
-    name: user?.user_metadata?.full_name || 'Charan Kumar',
-    title: 'Senior Product Designer',
-    exp: '8 Years Experience',
-    loc: 'Bangalore, India',
-    target: 'Principal Product Architect',
-    targetSalary: '₹45.0L',
-    cos: 'Google, Stripe, Atlassian',
-    bio: 'Strategic designer focused on building scalable design systems and high-conversion user interfaces for fintech and SaaS platforms. 8+ years shipping products at scale.'
+    name: user?.user_metadata?.full_name || 'User',
+    title: 'Update your professional title',
+    exp: '0 Years Experience',
+    loc: 'Remote / Global',
+    target: 'Update your career target',
+    targetSalary: '₹0.0L',
+    cos: 'Add target companies',
+    bio: 'Tell us about your professional background and the impact you aim to make.'
   });
+
+  useEffect(() => {
+    const fetchProfile = async () => {
+      if (user) {
+        const { data } = await supabase.from('profiles').select('*').eq('id', user.id).single();
+        if (data) {
+          setProfile(prev => ({
+            ...prev,
+            title: data.professional_title || prev.title,
+            exp: data.experience_years ? `${data.experience_years} Years Experience` : prev.exp,
+            loc: data.location || prev.loc,
+            target: data.target_title || prev.target,
+            targetSalary: data.target_salary || prev.targetSalary,
+            cos: data.target_companies || prev.cos,
+            bio: data.bio || prev.bio
+          }));
+        }
+      }
+    };
+    fetchProfile();
+  }, [user, supabase]);
+
+  const handleProfileUpdate = async (e: any) => {
+    e.preventDefault();
+    setLoading(true);
+    const formData = new FormData(e.target);
+    const updates = {
+      full_name: formData.get('fullName'),
+      bio: formData.get('bio'),
+      experience: formData.get('experience'),
+      salary_target: formData.get('salaryTarget'),
+    };
+
+    const { error } = await supabase.from('profiles').update(updates).eq('id', user?.id);
+    if (!error) {
+      showToast('success', 'Profile updated successfully!');
+      refreshProfile();
+    }
+    setLoading(false);
+  };
+
+  const uploadAvatar = async (e: any) => {
+    const file = e.target.files?.[0];
+    if (!file || !user) return;
+    
+    setLoading(true);
+    const fileExt = file.name.split('.').pop();
+    const filePath = `${user.id}-${Math.random()}.${fileExt}`;
+
+    const { data, error: storageError } = await supabase.storage.from('avatars').upload(filePath, file);
+
+    if (data) {
+      const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(filePath);
+      await supabase.from('profiles').update({ avatar_url: publicUrl }).eq('id', user.id);
+      showToast('success', 'Profile photo updated!');
+      refreshProfile();
+    }
+    setLoading(false);
+  };
+
+  const handleUpdate = async (field: string, val: string) => {
+    if (!user) return;
+    const dbFieldMap: Record<string, string> = {
+      title: 'professional_title',
+      exp: 'experience_years',
+      loc: 'location',
+      target: 'target_title',
+      targetSalary: 'target_salary',
+      cos: 'target_companies',
+      bio: 'bio'
+    };
+    
+    // Clean experience value if it's the 'exp' field
+    const dbVal = field === 'exp' ? parseInt(val.replace(/\D/g, '')) : val;
+
+    const { error } = await supabase
+      .from('profiles')
+      .update({ [dbFieldMap[field]]: dbVal })
+      .eq('id', user.id);
+
+    if (error) {
+      showToast('error', 'Update failed: ' + error.message);
+    } else {
+      setProfile(prev => ({ ...prev, [field]: val }));
+      showToast('success', `${field.toUpperCase()} updated successfully!`);
+    }
+  };
 
   const showToast = (type: string, msg: string) => {
     window.dispatchEvent(new CustomEvent('show-toast', { detail: { type, msg } }));
@@ -40,14 +131,27 @@ export default function ProfilePage() {
       <div className="app-shell">
         <Sidebar />
         <main className="main" style={{ padding: '32px 48px', background: 'var(--surface)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-            <div className="pg-hdr" style={{ marginBottom: 0 }}>
-              <h1 style={{ fontSize: '32px', fontWeight: 900, color: 'var(--t1)' }}>Career Profile</h1>
-              <p style={{ color: 'var(--t3)', fontWeight: 600 }}>Manage your identity and career target metrics.</p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '24px', marginBottom: '40px' }}>
+            <div 
+              style={{ width: '100px', height: '100px', borderRadius: '32px', background: 'var(--o1)', color: '#fff', fontSize: '32px', fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', position: 'relative', cursor: 'pointer' }}
+              onClick={() => fileRef.current?.click()}
+            >
+              {userProfile?.avatar_url ? (
+                <img src={userProfile.avatar_url} alt="Profile" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              ) : (
+                userProfile?.full_name?.[0] || 'U'
+              )}
+              <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.3)', opacity: 0, transition: 'opacity 200ms', display: 'flex', alignItems: 'center', justifyContent: 'center' }} 
+                   onMouseOver={e => e.currentTarget.style.opacity = '1'} 
+                   onMouseOut={e => e.currentTarget.style.opacity = '0'}>
+                <span className="mat" style={{ fontSize: '24px' }}>photo_camera</span>
+              </div>
             </div>
-            <button className="btn btn-s btn-sm" onClick={() => showToast('info', 'Editing profile...')}>
-              <span className="mat" style={{ fontSize: '14px', marginRight: '6px' }}>edit</span> Edit Profile
-            </button>
+            <input type="file" ref={fileRef} hidden accept="image/*" onChange={uploadAvatar} />
+            <div>
+              <h1 style={{ fontSize: '28px', fontWeight: 900, color: 'var(--t1)' }}>{userProfile?.full_name || 'Hirely User'}</h1>
+              <p style={{ color: 'var(--t3)', fontWeight: 600 }}>Manage your career identity and preferences.</p>
+            </div>
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: '24px', marginTop: '32px' }}>
@@ -55,9 +159,6 @@ export default function ProfilePage() {
             <div>
               <div className="card afu" style={{ marginBottom: '16px', padding: '24px' }}>
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: '20px' }}>
-                  <div style={{ width: '72px', height: '72px', borderRadius: '50%', background: 'linear-gradient(135deg, var(--s2), var(--s3))', border: '3px solid var(--w)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '28px', fontWeight: 800, color: 'var(--t2)', flexShrink: 0, boxShadow: 'var(--sh3)' }}>
-                    {profile.name[0].toUpperCase()}
-                  </div>
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: '22px', fontWeight: 800, letterSpacing: '-.02em', marginBottom: '3px' }}>{profile.name}</div>
                     <div style={{ fontSize: '14px', color: 'var(--t2)', fontWeight: 600, marginBottom: '12px' }}>{profile.title}</div>
@@ -122,8 +223,8 @@ export default function ProfilePage() {
                   ))}
                 </div>
                 
-                <button className="btn btn-g btn-sm" style={{ width: '100%', marginTop: '20px', borderRadius: '10px' }} onClick={() => showToast('info', 'Editing career targets...')}>
-                  <span className="mat" style={{ fontSize: '14px', marginRight: '6px' }}>edit</span> Update Targets
+                <button className="btn btn-g btn-sm" style={{ width: '100%', marginTop: '20px', borderRadius: '10px' }} onClick={() => handleUpdate('target', profile.target)}>
+                  <span className="mat" style={{ fontSize: '14px', marginRight: '6px' }}>sync</span> Update Targets
                 </button>
               </div>
 

@@ -4,6 +4,9 @@ import { useState } from 'react';
 import Navbar from '@/components/layout/Navbar';
 import Sidebar from '@/components/layout/Sidebar';
 import MobileBottomNav from '@/components/layout/MobileBottomNav';
+import { useUser } from '@/context/AuthContext';
+import { createClient } from '@/utils/supabase/client';
+import { useEffect } from 'react';
 
 type Job = {
   id: number;
@@ -36,8 +39,26 @@ const INITIAL_JOBS: Job[] = [
 
 export default function ApplicationTracker() {
   const [view, setView] = useState<'kanban' | 'list'>('kanban');
-  const [jobs, setJobs] = useState<Job[]>(INITIAL_JOBS);
+  const [jobs, setJobs] = useState<Job[]>([]);
   const [draggedId, setDraggedId] = useState<number | null>(null);
+  const { user } = useUser();
+  const supabase = createClient();
+
+  useEffect(() => {
+    const fetchJobs = async () => {
+      if (user) {
+        const { data } = await supabase.from('user_job_pipeline').select('*').eq('user_id', user.id);
+        if (data && data.length > 0) {
+          setJobs(data);
+        } else {
+          // One-time seed for demo if empty
+          setJobs(INITIAL_JOBS);
+          await supabase.from('user_job_pipeline').insert(INITIAL_JOBS.map(j => ({ ...j, user_id: user.id })));
+        }
+      }
+    };
+    fetchJobs();
+  }, [user, supabase]);
 
   const showToast = (type: string, msg: string) => {
     window.dispatchEvent(new CustomEvent('show-toast', { detail: { type, msg } }));
@@ -47,10 +68,18 @@ export default function ApplicationTracker() {
     setDraggedId(id);
   };
 
-  const handleDrop = (e: React.DragEvent, colId: string) => {
+  const handleDrop = async (e: React.DragEvent, colId: string) => {
     e.preventDefault();
     if (draggedId !== null) {
       setJobs(prev => prev.map(j => j.id === draggedId ? { ...j, colId } : j));
+      
+      if (user) {
+        await supabase.from('user_job_pipeline')
+          .update({ colId })
+          .eq('user_id', user.id)
+          .eq('id', draggedId);
+      }
+
       setDraggedId(null);
       showToast('success', 'Application moved!');
     }

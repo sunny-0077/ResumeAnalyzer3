@@ -5,12 +5,22 @@ import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import { createClient } from '@/utils/supabase/client';
 import { useUser } from '@/context/AuthContext';
+import { useEscClose } from '@/hooks/useAppHooks';
 
 export default function Navbar() {
   const router = useRouter();
-  const { user } = useUser();
+  const { user, profile } = useUser();
   const [showNotif, setShowNotif] = useState(false);
   const [showUser, setShowUser] = useState(false);
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
+
+  const userName = profile?.full_name || user?.user_metadata?.full_name || 'Hirely User';
+  const userInitials = userName.split(' ').map((n: string) => n[0]).join('').substring(0, 2).toUpperCase();
+  const userTier = profile?.tier || 'free';
+
+  useEscClose(setShowNotif);
+  useEscClose(setShowUser);
+  useEscClose(setShowMobileMenu);
 
   const openCmd = () => {
     window.dispatchEvent(new CustomEvent('open-cmdp'));
@@ -30,11 +40,42 @@ export default function Navbar() {
     <nav className="nav-pill">
       <div 
         className="nav-logo" 
-        onClick={() => router.push('/')}
+        onClick={() => { router.push('/'); setShowMobileMenu(false); }}
         style={{ cursor: 'pointer' }}
       >
         Hirely&nbsp;<span>AI</span>
       </div>
+
+      {/* MOBILE BURGER - PUBLIC ONLY */}
+      {isLanding && (
+        <button 
+          className="nav-burger" 
+          onClick={() => setShowMobileMenu(!showMobileMenu)}
+        >
+          <span className="mat">{showMobileMenu ? 'close' : 'menu'}</span>
+        </button>
+      )}
+
+      {/* MOBILE MENU OVERLAY */}
+      {showMobileMenu && (
+        <div className="nav-mobile-overlay afu">
+           <div className="nm-header">
+              <div className="auth-logo" style={{ color: 'var(--o1)' }}>Hirely&nbsp;<span>AI</span></div>
+              <button onClick={() => setShowMobileMenu(false)} className="nm-close">
+                 <span className="mat">close</span>
+              </button>
+           </div>
+           <div className="nm-links">
+              <Link href="/pricing" className="nm-link" onClick={() => setShowMobileMenu(false)}>Pricing</Link>
+              <Link href="/analyzer" className="nm-link" onClick={() => setShowMobileMenu(false)}>Resume Analyzer</Link>
+              <Link href="/auth" className="nm-link" onClick={() => setShowMobileMenu(false)}>Sign In</Link>
+              <Link href="/auth" className="nm-link nm-btn" onClick={() => setShowMobileMenu(false)}>Get Started Free</Link>
+           </div>
+           <div className="nm-footer">
+              <p>© 2025 Hirely AI · Made in India 🇮🇳</p>
+           </div>
+        </div>
+      )}
 
       <div className="nav-actions">
         {isLanding ? (
@@ -96,21 +137,38 @@ export default function Navbar() {
 
             <div style={{ position: 'relative' }}>
               <button className="nav-user-trigger" onClick={() => setShowUser(!showUser)}>
-                <div className="nav-avatar">{user?.user_metadata?.full_name?.[0] || user?.email?.[0]?.toUpperCase() || 'U'}</div>
+                <div style={{ width: '32px', height: '32px', borderRadius: '10px', background: 'var(--o1)', color: '#fff', fontSize: '12px', fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+                  {profile?.avatar_url ? (
+                    <img src={profile.avatar_url} alt={userName} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  ) : (
+                    userInitials
+                  )}
+                </div>
+                {userTier !== 'free' && (
+                  <div style={{ position: 'absolute', top: '-4px', right: '-4px', background: 'var(--o3)', color: '#fff', fontSize: '8px', padding: '2px 4px', borderRadius: '4px', border: '2px solid var(--w)', fontWeight: 900 }}>
+                    PRO
+                  </div>
+                )}
                 <span className="mat">expand_more</span>
               </button>
               {showUser && (
                 <div className="nav-drop adu" style={{ right: 0, width: '240px' }}>
                   <div className="nav-user-h">
-                    <div className="nav-avatar">{user?.user_metadata?.full_name?.[0] || user?.email?.[0]?.toUpperCase() || 'U'}</div>
+                    <div className="nav-avatar" style={{ overflow: 'hidden' }}>
+                      {profile?.avatar_url ? (
+                        <img src={profile.avatar_url} alt={userName} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      ) : (
+                        userInitials
+                      )}
+                    </div>
                     <div>
-                      <p>{user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'User'}</p>
+                      <p>{userName}</p>
                       <span>{user?.email || ''}</span>
                     </div>
                   </div>
                   <div className="nav-user-links">
                     <Link href="/profile" className="nav-user-link"><span className="mat">person</span> Profile</Link>
-                    <Link href="/pricing" className="nav-user-link"><span className="mat">verified</span> Subscription <span className="sb-badge">PRO</span></Link>
+                    <Link href="/pricing" className="nav-user-link"><span className="mat">verified</span> Subscription <span className="sb-badge">{userTier.toUpperCase()}</span></Link>
                     <Link href="/profile" className="nav-user-link"><span className="mat">settings</span> Settings</Link>
                   </div>
                   <div className="nav-user-f">

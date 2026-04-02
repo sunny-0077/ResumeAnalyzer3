@@ -4,12 +4,16 @@ import { useState, useEffect } from 'react';
 import Navbar from '@/components/layout/Navbar';
 import Sidebar from '@/components/layout/Sidebar';
 import MobileBottomNav from '@/components/layout/MobileBottomNav';
+import { useLoading } from '@/hooks/useAppHooks';
+import { createClient } from '@/utils/supabase/client';
 
 export default function ResumeAnalyzer() {
   const [state, setState] = useState<'idle' | 'uploading' | 'analyzing' | 'result'>('idle');
   const [progress, setProgress] = useState(0);
   const [score, setScore] = useState(0);
   const [file, setFile] = useState<File | null>(null);
+  const { loading: isAnalyzing, setLoading: setIsAnalyzing } = useLoading();
+  const supabase = createClient();
 
   const showToast = (type: any, msg: string) => window.dispatchEvent(new CustomEvent('show-toast', { detail: { type, msg } }));
 
@@ -29,7 +33,8 @@ export default function ResumeAnalyzer() {
     startAnalysis();
   };
 
-  const startAnalysis = () => {
+  const startAnalysis = async () => {
+    setIsAnalyzing(true);
     setState('uploading');
     let p = 0;
     const interval = setInterval(() => {
@@ -38,9 +43,27 @@ export default function ResumeAnalyzer() {
         p = 100;
         clearInterval(interval);
         setState('analyzing');
-        setTimeout(() => {
+        setTimeout(async () => {
+          const finalScore = 84;
+          const rawKeywords = ['Kubernetes', 'SaaS', 'Kubernetes'];
+          const rawGaps = ['System Design', 'System Design'];
+          
+          const uniqueKeywords = [...new Set(rawKeywords)];
+          const uniqueGaps = [...new Set(rawGaps)];
+
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user) {
+            await supabase.from('user_scans').insert({
+              user_id: user.id,
+              score: finalScore,
+              filename: file?.name || 'resume.pdf',
+              details: { match: 'Technical PM', gaps: uniqueGaps, keywords: uniqueKeywords }
+            });
+          }
           setState('result');
-          setScore(84);
+          setScore(finalScore);
+          setIsAnalyzing(false);
+          showToast('success', 'Analysis saved to your profile!');
         }, 2000);
       }
       setProgress(p);

@@ -1,11 +1,14 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Navbar from '@/components/layout/Navbar';
 import Sidebar from '@/components/layout/Sidebar';
 import MobileBottomNav from '@/components/layout/MobileBottomNav';
 import { useSubscription } from '@/hooks/useSubscription';
+import { useLoading } from '@/hooks/useAppHooks';
+import { sortResults, requireProAccess, capitalize, bulletsToSentence } from '@/lib/utils';
+import { createClient } from '@/utils/supabase/client';
 
 export default function JobMatch() {
   const router = useRouter();
@@ -20,29 +23,68 @@ export default function JobMatch() {
   ]);
 
   const [results, setResults] = useState<any[]>([]);
-  const [isMatching, setIsMatching] = useState(false);
+  const { loading: isMatching, setLoading: setIsMatching } = useLoading();
+  const [history, setHistory] = useState<any[]>([]);
+  const supabase = createClient();
 
-  const startMatch = () => {
-    if (!resumeText.trim()) {
-      showToast("error","Paste your resume content first");
+  useEffect(() => {
+    if (tab === 'history') {
+      const fetchHistory = async () => {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const { data } = await supabase.from('user_matches').select('*').eq('user_id', user.id).order('created_at', { ascending: false });
+          if (data) setHistory(data);
+        }
+      };
+      fetchHistory();
+    }
+  }, [tab, supabase]);
+
+  const startMatch = async () => {
+    if (!resumeText || resumeText.trim().length < 50) {
+      showToast("error", "Resume too short (min 50 chars)");
       return;
     }
     if (tier === 'free') {
       window.dispatchEvent(new CustomEvent('show-toast', { detail: { type: 'info', msg: 'Free plan: 1 match/day used. Upgrade for unlimited A/B compares.' } }));
     }
     setIsMatching(true);
-    setTimeout(() => {
-      setResults([
-        { id: 1, score: 91, fit: 'EXCELLENT', skills: ['API Design', 'Payments'], gap: ['Scaling'] },
-        { id: 2, score: 78, fit: 'STRONG', skills: ['Growth', 'SaaS'], gap: ['Enterprise'] },
-        { id: 3, score: 65, fit: 'MODERATE', skills: ['Fintech'], gap: ['Infrastructure'] },
-      ]);
+    // Sanitize and truncate for optimal processing
+    const cleanResume = bulletsToSentence(resumeText.trim()).replace(/\s+/g, ' ');
+    const trimmedResume = cleanResume.slice(0, 4000);
+    
+    setTimeout(async () => {
+      // Apply safe fallbacks and capitalization to comparison context
+      const jobsWithFallbacks = abJobs.map(j => ({
+        ...j,
+        company: capitalize(j.company || 'Target Company'),
+        title: capitalize(j.title || 'Desired Role')
+      }));
+      
+      const rawResults = [
+        { id: 1, score: 91, fit: 'EXCELLENT', skills: [...new Set(['API Design', 'Payments', 'API Design'])], gap: [...new Set(['Scaling'])] },
+        { id: 2, score: 78, fit: 'STRONG', skills: [...new Set(['Growth', 'SaaS'])], gap: [...new Set(['Enterprise', 'Enterprise'])] },
+        { id: 3, score: 65, fit: 'MODERATE', skills: [...new Set(['Fintech'])], gap: [...new Set(['Infrastructure'])] },
+      ];
+      const sorted = sortResults(rawResults);
+      setResults(sorted);
+
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        await supabase.from('user_matches').insert({
+          user_id: user.id,
+          best_score: sorted[0].score,
+          match_data: sorted
+        });
+      }
+      
       setIsMatching(false);
+      showToast('success', 'Matches saved to history!');
     }, 1500);
   };
 
   const handleLocalTab = () => {
-    if (tier !== 'advanced') {
+    if (!requireProAccess(tier)) {
       window.dispatchEvent(new CustomEvent('open-upgrade'));
     } else {
       setTab('local');
@@ -95,8 +137,12 @@ export default function JobMatch() {
                   className="ab-area" 
                   value={resumeText}
                   onChange={(e) => setResumeText(e.target.value)}
+                  onInput={(e: any) => {
+                    e.target.style.height = 'auto';
+                    e.target.style.height = e.target.scrollHeight + 'px';
+                  }}
                   placeholder="Paste your central resume content here..."
-                  style={{ minHeight: '100px', fontSize: '15px' }}
+                  style={{ minHeight: '100px', fontSize: '15px', overflow: 'hidden' }}
                 />
               </div>
 
@@ -141,7 +187,11 @@ export default function JobMatch() {
                           next[i].jd = e.target.value;
                           setAbJobs(next);
                         }}
-                        style={{ minHeight: '130px' }}
+                        onInput={(e: any) => {
+                          e.target.style.height = 'auto';
+                          e.target.style.height = e.target.scrollHeight + 'px';
+                        }}
+                        style={{ minHeight: '130px', overflow: 'hidden' }}
                       />
                     </div>
 

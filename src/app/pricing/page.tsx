@@ -5,9 +5,29 @@ import Navbar from '@/components/layout/Navbar';
 import Sidebar from '@/components/layout/Sidebar';
 import MobileBottomNav from '@/components/layout/MobileBottomNav';
 import { useSubscription, UserTier } from '@/hooks/useSubscription';
+import { fetchWithRetry } from '@/lib/utils';
+import { getRegionData, formatPrice } from '@/lib/pricing';
+
+import { useEffect, useMemo } from 'react';
 
 export default function PricingPage() {
   const { tier, upgrade } = useSubscription();
+  const [country, setCountry] = useState('IN');
+
+  const region = useMemo(() => getRegionData(country), [country]);
+
+  useEffect(() => {
+    const detectCountry = async () => {
+      try {
+        const res = await fetch('/api/get-country');
+        const data = await res.json();
+        if (data.country) setCountry(data.country);
+      } catch (err) {
+        console.error('Country detection fallback.');
+      }
+    };
+    detectCountry();
+  }, []);
 
   const showToast = (type: string, msg: string) => {
     window.dispatchEvent(new CustomEvent('show-toast', { detail: { type, msg } }));
@@ -23,7 +43,7 @@ export default function PricingPage() {
     }
 
     try {
-      const res = await fetch("/api/create-order", {
+      const res = await fetchWithRetry("/api/create-order", {
         method: "POST",
         body: JSON.stringify({ tier: targetTier }),
       });
@@ -37,7 +57,7 @@ export default function PricingPage() {
         name: "HirelyAI",
         order_id: order.id,
         handler: async function (response: any) {
-          await fetch("/api/verify-payment", {
+          await fetchWithRetry("/api/verify-payment", {
             method: "POST",
             body: JSON.stringify(response),
           });
@@ -47,16 +67,17 @@ export default function PricingPage() {
 
       const rzp = new (window as any).Razorpay(options);
       rzp.open();
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      showToast('error', 'Checkout failed.');
+      const msg = err.message === 'Request timed out after 15 seconds' ? 'Checkout timed out. Please try again.' : 'Checkout failed.';
+      showToast('error', msg);
     }
   };
 
   const plans = [
     {
       name: 'Free',
-      price: '₹0',
+      price: formatPrice(0, region.symbol),
       period: '/month',
       desc: 'Perfect for exploring and getting your first ATS score.',
       btn: tier === 'free' ? 'Current Plan' : 'Downgrade to Free',
@@ -67,7 +88,7 @@ export default function PricingPage() {
     },
     {
       name: 'Pro',
-      price: '₹499',
+      price: formatPrice(region.pro, region.symbol),
       period: '/month',
       desc: 'Everything you need to actively job hunt and land interviews.',
       btn: tier === 'pro' ? 'Current Plan' : 'Upgrade to Pro',
@@ -78,7 +99,7 @@ export default function PricingPage() {
     },
     {
       name: 'Advanced',
-      price: '₹899',
+      price: formatPrice(region.advanced, region.symbol),
       period: '/month',
       desc: 'The complete career acceleration suite. No limits, no compromises.',
       btn: tier === 'advanced' ? 'Current Plan' : 'Go Advanced',
@@ -88,6 +109,7 @@ export default function PricingPage() {
       popular: false
     }
   ];
+
 
   const featuresList = [
     ['ATS Analysis', '1/day', 'Unlimited', 'Unlimited'],
@@ -121,15 +143,17 @@ export default function PricingPage() {
           {/* PLAN CARDS */}
           <div className="pricing-layout">
             {plans.map((p, idx) => (
-              <div key={idx} className={`pricing-card ${p.popular ? 'popular' : ''}`}>
+              <div key={idx} className={`pricing-card ${p.popular ? 'popular' : ''} ${tier === p.tierVal ? 'active-plan' : ''}`}>
+                {tier === p.tierVal && <div className="active-badge"><span className="mat">verified</span> Current Plan</div>}
                 <div className="pricing-name">{p.name}</div>
                 <div className="pricing-price">{p.price}<span className="pricing-period">{p.period}</span></div>
                 <div className="pricing-desc">{p.desc}</div>
                 <button 
-                  className={`pricing-btn ${p.popular ? 'primary' : ''}`} 
+                  className={`pricing-btn ${p.popular ? 'primary' : ''} ${tier === p.tierVal ? 'disabled' : ''}`} 
                   onClick={() => handleUpgrade(p.tierVal)}
+                  disabled={tier === p.tierVal}
                 >
-                  {p.btn}
+                  {tier === p.tierVal ? 'Active Plan' : p.btn}
                 </button>
                 <ul className="pricing-feat-list">
                   {p.feats.map((f, i) => (
@@ -143,95 +167,92 @@ export default function PricingPage() {
             ))}
           </div>
 
-          {/* FEATURE COMPARISON TABLE */}
-          <div style={{ fontSize: '20px', fontWeight: 800, letterSpacing: '-.02em', textAlign: 'center', margin: '32px 0 16px' }}>Detailed Feature Comparison</div>
-          <div style={{ overflowX: 'auto' }}>
-            <table className="fc-table">
-              <thead>
-                <tr>
-                  <th>Feature</th>
-                  <th>Free</th>
-                  <th>Pro</th>
-                  <th>Advanced</th>
-                </tr>
-              </thead>
-              <tbody>
-                {featuresList.map((row, i) => (
-                  <tr key={i}>
-                    <td>{row[0]}</td>
-                    <td>{row[1] === true ? <span className="fc-check">✓</span> : row[1] === false ? <span className="fc-x">✕</span> : <span className="fc-text">{row[1]}</span>}</td>
-                    <td>{row[2] === true ? <span className="fc-check">✓</span> : row[2] === false ? <span className="fc-x">✕</span> : <span className="fc-text">{row[2]}</span>}</td>
-                    <td>{row[3] === true ? <span className="fc-check">✓</span> : row[3] === false ? <span className="fc-x">✕</span> : <span className="fc-text">{row[3]}</span>}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <div style={{ textAlign: 'center', marginTop: '20px', fontSize: '13px', color: 'var(--t3)' }}>
-            All plans include a 7-day free trial. Cancel anytime. Secure payments via Razorpay.
-          </div>
-
           <style jsx>{`
             .pricing-layout {
               display: grid;
-              grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+              grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
               gap: 24px;
-              margin-bottom: 32px;
+              margin-bottom: 48px;
             }
             .pricing-card {
               background: var(--w);
               border: 1.5px solid var(--bd);
-              border-radius: 20px;
-              padding: 32px;
+              border-radius: 24px;
+              padding: 40px;
               box-shadow: var(--sh1);
-              transition: transform 150ms, box-shadow 150ms;
+              transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
               position: relative;
+              overflow: hidden;
             }
-            .pricing-card.popular {
-              border-color: var(--o4);
-              box-shadow: 0 12px 32px rgba(163, 61, 0, 0.12);
-              border-width: 2px;
+            .pricing-card.active-plan {
+              border-color: var(--o3);
+              background: var(--o7);
+              box-shadow: 0 16px 48px rgba(163, 61, 0, 0.15);
+            }
+            .active-badge {
+              position: absolute;
+              top: 0;
+              right: 0;
+              background: var(--o3);
+              color: #fff;
+              font-size: 10px;
+              font-weight: 900;
+              padding: 6px 14px;
+              border-bottom-left-radius: 12px;
+              display: flex;
+              align-items: center;
+              gap: 4px;
+              text-transform: uppercase;
+              letter-spacing: 0.05em;
+            }
+            .pricing-card.popular::before {
+              content: '';
+              position: absolute;
+              top: 0; left: 0; right: 0; height: 6px;
+              background: linear-gradient(90deg, var(--o1), var(--o2), var(--o3));
+            }
+            .pricing-card:hover {
+              transform: translateY(-8px);
+              box-shadow: var(--shl);
             }
             .pricing-name {
-              font-size: 14px;
+              font-size: 13px;
               font-weight: 900;
               text-transform: uppercase;
-              letter-spacing: .08em;
+              letter-spacing: 0.12em;
               color: var(--t4);
-              margin-bottom: 12px;
+              margin-bottom: 16px;
             }
-            .pricing-card.popular .pricing-name {
-              color: var(--o3);
-            }
+            .active-plan .pricing-name { color: var(--o2); }
             .pricing-price {
-              font-size: 44px;
-              font-weight: 900;
+              font-size: 52px;
+              font-weight: 950;
               color: var(--t1);
-              letter-spacing: -.03em;
+              letter-spacing: -0.04em;
               margin-bottom: 16px;
               display: flex;
               align-items: baseline;
             }
             .pricing-period {
-              font-size: 16px;
+              font-size: 18px;
               font-weight: 700;
               color: var(--t3);
-              letter-spacing: normal;
             }
             .pricing-desc {
-              font-size: 14px;
+              font-size: 15px;
               color: var(--t2);
               line-height: 1.6;
-              margin-bottom: 24px;
+              margin-bottom: 32px;
+              font-weight: 600;
             }
             .pricing-btn {
               width: 100%;
-              padding: 14px;
-              border-radius: 12px;
+              padding: 16px;
+              border-radius: 14px;
               font-size: 16px;
               font-weight: 900;
               border: 1px solid var(--bd);
-              background: var(--s1);
+              background: var(--w);
               color: var(--t1);
               cursor: pointer;
               transition: all 150ms;
@@ -240,36 +261,45 @@ export default function PricingPage() {
             .pricing-btn.primary {
               background: var(--t1);
               color: var(--w);
-              border-color: var(--t1);
+              border: none;
+            }
+            .pricing-btn.disabled {
+              background: var(--o3);
+              color: #fff;
+              border: none;
+              cursor: default;
+              opacity: 0.8;
+            }
+            .pricing-btn:not(.disabled):hover {
+              transform: scale(1.02);
+              box-shadow: 0 8px 24px rgba(0,0,0,0.1);
             }
             .pricing-feat-list {
               list-style: none;
               padding: 0;
-              margin: 0;
             }
             .pricing-feat-list li {
               position: relative;
-              padding-left: 28px;
-              font-size: 14px;
+              padding-left: 32px;
+              font-size: 15px;
               color: var(--t1);
               font-weight: 600;
-              margin-bottom: 16px;
+              margin-bottom: 18px;
             }
             .pricing-feat-list li::before {
               content: 'check_circle';
               font-family: 'Material Symbols Outlined';
               position: absolute;
-              left: 0;
-              top: -2px;
+              left: 0; top: -1px;
               font-size: 20px;
-              color: var(--gn);
+              color: var(--o3);
             }
             .pricing-feat-list li.no {
               color: var(--t4);
-              text-decoration: line-through;
+              opacity: 0.6;
             }
             .pricing-feat-list li.no::before {
-              content: 'remove_circle_outline';
+              content: 'block';
               color: var(--t4);
             }
             .fc-table {

@@ -4,27 +4,68 @@ import { useState } from 'react';
 import Navbar from '@/components/layout/Navbar';
 import Sidebar from '@/components/layout/Sidebar';
 import MobileBottomNav from '@/components/layout/MobileBottomNav';
+import { useLoading } from '@/hooks/useAppHooks';
+import { checkCompletion } from '@/lib/utils';
+import { useUser } from '@/context/AuthContext';
+import { createClient } from '@/utils/supabase/client';
+import { useEffect } from 'react';
 
 export default function SkillTestPage() {
+  const { user } = useUser();
+  const supabase = createClient();
   const [step, setStep] = useState(0); // 0: intro, 1: question 1, 2: question 2, 3: result
   const [selectedOpt, setSelectedOpt] = useState<number | null>(null);
+  const { loading: isStarting, setLoading: setIsStarting } = useLoading();
+  const [score, setScore] = useState(0);
+  const [prevScores, setPrevScores] = useState<any[]>([]);
+
+  useEffect(() => {
+    const fetchScores = async () => {
+      if (user) {
+        const { data } = await supabase.from('user_skill_assessments').select('*').eq('user_id', user.id);
+        if (data) setPrevScores(data);
+      }
+    };
+    fetchScores();
+  }, [user, supabase]);
   
   const showToast = (type: string, msg: string) => {
     window.dispatchEvent(new CustomEvent('show-toast', { detail: { type, msg } }));
   };
 
   const startTest = () => {
-    setStep(1);
-    setSelectedOpt(null);
+    setIsStarting(true);
+    setTimeout(() => {
+      setStep(1);
+      setSelectedOpt(null);
+      setIsStarting(false);
+    }, 800);
   };
 
   const nextQ = () => {
-    if (selectedOpt === null) {
-      showToast('error', 'Please select an answer.');
-      return;
+    const isCorrect = selectedOpt === questions[step - 1].correct;
+    if (isCorrect) setScore(s => s + 50);
+
+    const nextStep = step + 1;
+    if (nextStep > 2) {
+      const finalScore = isCorrect ? score + 50 : score;
+      submitScore(finalScore);
+      setStep(3); // Result
+    } else {
+      setStep(nextStep);
     }
-    setStep(prev => prev + 1);
     setSelectedOpt(null);
+  };
+
+  const submitScore = async (final: number) => {
+    if (user) {
+      await supabase.from('user_skill_assessments').insert({
+        user_id: user.id,
+        category: 'System Design',
+        test_score: final,
+        verified: final >= 80
+      });
+    }
   };
 
   const questions = [
@@ -76,7 +117,14 @@ export default function SkillTestPage() {
                   <span className="badge bp"><span className="mat">help</span> 15 Questions</span>
                   <span className="badge bo"><span className="mat">stars</span> High ROI</span>
                 </div>
-                <button className="btn btn-p" onClick={startTest} style={{ padding: '16px 40px', fontSize: '16px' }}>Start Assessment →</button>
+                <button 
+                  className="btn btn-p" 
+                  onClick={startTest} 
+                  style={{ padding: '16px 40px', fontSize: '16px' }}
+                  disabled={isStarting}
+                >
+                  {isStarting ? 'Loading Test...' : 'Start Assessment →'}
+                </button>
               </div>
             )}
 
