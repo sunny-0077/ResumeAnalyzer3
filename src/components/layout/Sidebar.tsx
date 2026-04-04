@@ -11,6 +11,23 @@ const TIER_LABELS: Record<string, { label: string; color: string }> = {
   advanced: { label: 'ADV', color: 'var(--tl)' },
 };
 
+const StatusBadge = ({ label = 'PRO' }) => (
+  <span className="sb-status-badge" style={{ 
+    marginLeft: 'auto', 
+    fontSize: '9px', 
+    fontWeight: 900, 
+    background: 'var(--o6)', 
+    color: 'var(--o1)', 
+    padding: '2px 6px', 
+    borderRadius: '4px', 
+    letterSpacing: '0.02em',
+    border: '1px solid var(--o5)',
+    flexShrink: 0
+  }}>
+    {label}
+  </span>
+);
+
 export default function Sidebar() {
   const pathname = usePathname();
   const { tier } = useSubscription();
@@ -40,9 +57,11 @@ export default function Sidebar() {
         <div className="sb-sec">Tools</div>
         <Link href="/cover-letter" className={`sb-it ${useActivePath('/cover-letter', pathname)}`}>
           <span className={pathname === '/cover-letter' ? 'matf' : 'mat'}>mail</span> <span>Cover Letters</span>
+          <StatusBadge />
         </Link>
         <Link href="/rewriter" className={`sb-it ${useActivePath('/rewriter', pathname)}`}>
           <span className={pathname === '/rewriter' ? 'matf' : 'mat'}>auto_awesome</span> <span>Bullet Rewriter</span>
+          <StatusBadge />
         </Link>
         <Link href="/templates" className={`sb-it ${useActivePath('/templates', pathname)}`}>
           <span className={pathname === '/templates' ? 'matf' : 'mat'}>format_paint</span> <span>ATS Templates</span>
@@ -51,15 +70,19 @@ export default function Sidebar() {
         <div className="sb-sec">Career Intelligence</div>
         <Link href="/interview" className={`sb-it ${useActivePath('/interview', pathname)}`}>
           <span className={pathname === '/interview' ? 'matf' : 'mat'}>mic</span> <span>Interview Prep</span>
+          <StatusBadge />
         </Link>
         <Link href="/salary" className={`sb-it ${useActivePath('/salary', pathname)}`}>
           <span className={pathname === '/salary' ? 'matf' : 'mat'}>payments</span> <span>Salary Intel</span>
+          <StatusBadge />
         </Link>
         <Link href="/career-path" className={`sb-it ${useActivePath('/career-path', pathname)}`}>
           <span className={pathname === '/career-path' ? 'matf' : 'mat'}>trending_up</span> <span>Career Path</span>
+          <StatusBadge />
         </Link>
         <Link href="/skilltest" className={`sb-it ${useActivePath('/skilltest', pathname)}`}>
           <span className={pathname === '/skilltest' ? 'matf' : 'mat'}>psychology</span> <span>Skill Test</span>
+          <StatusBadge />
         </Link>
 
         <div className="sb-sec">Account</div>
